@@ -17,7 +17,7 @@
 
 - name: Copy docker-compose.yml
   copy:
-    src: "{{ playbook_dir }}/../../compose/docker-compose.yml"
+    src: "{{ playbook_dir }}/../compose/docker-compose.yml"
     dest: /home/clive/compose/docker-compose.yml
     owner: clive
     group: clive

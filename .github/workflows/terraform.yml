@@ -1,0 +1,58 @@
+name: Terraform
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "infrastructure/terraform/**"
+  workflow_dispatch:
+
+jobs:
+  plan:
+    name: Terraform plan
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform init and plan
+        env:
+          TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_ssh_public_key: ${{ secrets.CLIVE_SSH_PUBLIC_KEY }}
+          TF_VAR_owner_ip: ${{ secrets.OWNER_IP }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
+        run: |
+          cd infrastructure/terraform
+          terraform init
+          terraform plan
+
+  apply:
+    name: Terraform apply
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform init and apply
+        env:
+          TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_ssh_public_key: ${{ secrets.CLIVE_SSH_PUBLIC_KEY }}
+          TF_VAR_owner_ip: ${{ secrets.OWNER_IP }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
+        run: |
+          cd infrastructure/terraform
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply tfplan

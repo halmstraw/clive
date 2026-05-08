@@ -13,7 +13,10 @@ on:
 jobs:
   rollback:
     name: Roll back production
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,29 +26,25 @@ jobs:
         id: prev
         run: echo "sha=$(git rev-parse HEAD~1 | head -c 8)" >> $GITHUB_OUTPUT
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          ssh-private-key: ${{ secrets.CLIVE_SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: ssh-keyscan -H ${{ secrets.CLIVE_SERVER_IP }} >> ~/.ssh/known_hosts
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy previous image
+        env:
+          ORCHESTRATOR_IMAGE_TAG: ${{ steps.prev.outputs.sha }}
+          QUERY_IMAGE_TAG: ${{ steps.prev.outputs.sha }}
+          TELEGRAM_IMAGE_TAG: ${{ steps.prev.outputs.sha }}
         run: |
-          ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
-            "ORCHESTRATOR_IMAGE_TAG=${{ steps.prev.outputs.sha }} \
-             QUERY_IMAGE_TAG=${{ steps.prev.outputs.sha }} \
-             TELEGRAM_IMAGE_TAG=${{ steps.prev.outputs.sha }} \
-             docker compose -f /home/clive/compose/docker-compose.yml \
-             up -d --pull always"
+          docker compose -f infrastructure/compose/docker-compose.yml \
+            up -d --pull always
 
       - name: Verify rollback
-        run: |
-          ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
-            "docker compose -f /home/clive/compose/docker-compose.yml ps"
+        run: docker compose -f infrastructure/compose/docker-compose.yml ps
 
       - name: Log rollback event
         run: |
           echo "ROLLBACK: from ${{ inputs.sha }} to ${{ steps.prev.outputs.sha }}, reason: ${{ inputs.reason }}"
-          # TODO: emit rollback event to Block 13 / Block 25 when orchestrator is operational

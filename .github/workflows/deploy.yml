@@ -8,6 +8,9 @@ jobs:
   build:
     name: Build images
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       orchestrator_tag: ${{ steps.meta.outputs.sha }}
     steps:

@@ -1,16 +1,16 @@
 ---
 - name: Update apt cache
-  apt:
+  ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
 
 - name: Upgrade all packages
-  apt:
+  ansible.builtin.apt:
     upgrade: dist
     autoremove: true
 
 - name: Install base packages
-  apt:
+  ansible.builtin.apt:
     name:
       - ufw
       - fail2ban
@@ -21,15 +21,16 @@
     state: present
 
 - name: Configure unattended upgrades
-  copy:
+  ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     content: |
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
       APT::Periodic::AutocleanInterval "7";
+    mode: "0644"
 
 - name: Configure fail2ban SSH jail
-  copy:
+  ansible.builtin.copy:
     dest: /etc/fail2ban/jail.local
     content: |
       [sshd]
@@ -37,10 +38,11 @@
       port     = ssh
       maxretry = 5
       bantime  = 3600
-  notify: restart fail2ban
+    mode: "0644"
+  notify: Restart fail2ban
 
 - name: Enable and start fail2ban
-  systemd:
+  ansible.builtin.systemd:
     name: fail2ban
     enabled: true
     state: started
@@ -67,20 +69,20 @@
     state: enabled
 
 - name: Configure NTP
-  systemd:
+  ansible.builtin.systemd:
     name: systemd-timesyncd
     enabled: true
     state: started
 
 - name: Create clive service user
-  user:
+  ansible.builtin.user:
     name: clive
     shell: /bin/bash
     create_home: true
     system: false
 
 - name: Create /etc/clive directory
-  file:
+  ansible.builtin.file:
     path: /etc/clive
     state: directory
     owner: clive
@@ -88,10 +90,9 @@
     mode: "0750"
 
 - name: Create /data/clive directory
-  file:
+  ansible.builtin.file:
     path: /data/clive
     state: directory
     owner: clive
     group: clive
     mode: "0750"
-

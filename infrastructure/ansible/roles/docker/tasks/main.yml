@@ -1,6 +1,6 @@
 ---
 - name: Install Docker dependencies
-  apt:
+  ansible.builtin.apt:
     name:
       - ca-certificates
       - curl
@@ -8,17 +8,17 @@
     state: present
 
 - name: Add Docker GPG key
-  apt_key:
+  ansible.builtin.apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
     state: present
 
 - name: Add Docker apt repository
-  apt_repository:
+  ansible.builtin.apt_repository:
     repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     state: present
 
 - name: Install Docker Engine and Compose plugin
-  apt:
+  ansible.builtin.apt:
     name:
       - docker-ce
       - docker-ce-cli
@@ -29,7 +29,7 @@
     update_cache: true
 
 - name: Configure Docker daemon
-  copy:
+  ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     content: |
       {
@@ -39,17 +39,17 @@
           "max-file": "3"
         }
       }
-  notify: restart docker
+    mode: "0644"
+  notify: Restart docker
 
 - name: Enable and start Docker
-  systemd:
+  ansible.builtin.systemd:
     name: docker
     enabled: true
     state: started
 
 - name: Add clive user to docker group
-  user:
+  ansible.builtin.user:
     name: clive
     groups: docker
     append: true
-

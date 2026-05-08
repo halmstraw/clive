@@ -1,11 +1,17 @@
 ---
+- name: Download rclone install script
+  ansible.builtin.get_url:
+    url: https://rclone.org/install.sh
+    dest: /tmp/rclone-install.sh
+    mode: "0755"
+
 - name: Install rclone
-  shell: curl https://rclone.org/install.sh | bash
-  args:
+  ansible.builtin.command:
+    cmd: /tmp/rclone-install.sh
     creates: /usr/bin/rclone
 
 - name: Create rclone config directory
-  file:
+  ansible.builtin.file:
     path: /home/clive/.config/rclone
     state: directory
     owner: clive
@@ -13,7 +19,7 @@
     mode: "0700"
 
 - name: Write rclone config for MinIO backup target
-  copy:
+  ansible.builtin.copy:
     dest: /home/clive/.config/rclone/rclone.conf
     owner: clive
     group: clive
@@ -35,7 +41,7 @@
   no_log: true
 
 - name: Create backup log directory
-  file:
+  ansible.builtin.file:
     path: /var/log/clive
     state: directory
     owner: clive
@@ -43,7 +49,7 @@
     mode: "0750"
 
 - name: Write backup script
-  copy:
+  ansible.builtin.copy:
     dest: /usr/local/bin/clive-backup
     owner: root
     group: root
@@ -59,7 +65,7 @@
       echo "[${DATE}] Backup complete" >> $LOG
 
 - name: Schedule nightly backup cron job
-  cron:
+  ansible.builtin.cron:
     name: clive-minio-backup
     user: clive
     hour: "2"

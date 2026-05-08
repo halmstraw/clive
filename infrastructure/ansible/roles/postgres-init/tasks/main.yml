@@ -1,6 +1,7 @@
 ---
 - name: Wait for PostgreSQL container to be healthy
-  command: docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres pg_isready -U postgres
+  ansible.builtin.command:
+    cmd: docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres pg_isready -U postgres
   register: pg_ready
   until: pg_ready.rc == 0
   retries: 10
@@ -8,14 +9,14 @@
   become_user: clive
 
 - name: Create SQL staging directory
-  file:
+  ansible.builtin.file:
     path: /tmp/clive-sql
     state: directory
     owner: clive
     mode: "0750"
 
 - name: Copy SQL init files
-  copy:
+  ansible.builtin.copy:
     src: "{{ playbook_dir }}/../sql/init/{{ item }}"
     dest: "/tmp/clive-sql/"
     owner: clive
@@ -28,7 +29,8 @@
     - 05_application_tables.sql
 
 - name: Run SQL init scripts (idempotent)
-  shell: "docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres psql -U postgres -d clive < /tmp/clive-sql/{{ item }}"
+  ansible.builtin.shell:
+    cmd: "docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres psql -U postgres -d clive < /tmp/clive-sql/{{ item }}"
   loop:
     - 01_extensions.sql
     - 02_schemas.sql

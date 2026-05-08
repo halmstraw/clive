@@ -1,0 +1,58 @@
+---
+- name: Create actions-runner directory
+  ansible.builtin.file:
+    path: /home/clive/actions-runner
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0750"
+
+- name: Download runner archive
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    dest: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+    checksum: "{{ runner_checksum }}"
+    mode: "0644"
+
+- name: Extract runner archive
+  ansible.builtin.unarchive:
+    src: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+    dest: /home/clive/actions-runner
+    owner: clive
+    group: clive
+    remote_src: true
+    creates: /home/clive/actions-runner/run.sh
+
+- name: Configure runner
+  ansible.builtin.command:
+    argv:
+      - /home/clive/actions-runner/config.sh
+      - --url
+      - "https://github.com/{{ runner_repo }}"
+      - --token
+      - "{{ runner_token }}"
+      - --name
+      - "{{ runner_name }}"
+      - --labels
+      - "{{ runner_labels }}"
+      - --unattended
+      - --replace
+    creates: /home/clive/actions-runner/.runner
+  become_user: clive
+  no_log: true
+
+- name: Install runner as systemd service
+  ansible.builtin.command:
+    argv:
+      - /home/clive/actions-runner/svc.sh
+      - install
+      - clive
+    chdir: /home/clive/actions-runner
+    creates: "/etc/systemd/system/actions.runner.{{ runner_repo | replace('/', '-') }}.{{ runner_name }}.service"
+
+- name: Start and enable runner service
+  ansible.builtin.systemd:
+    name: "actions.runner.{{ runner_repo | replace('/', '-') }}.{{ runner_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

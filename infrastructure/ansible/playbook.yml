@@ -12,3 +12,4 @@
     - compose-deploy
     - postgres-init
     - backup-cron
+    - github-runner

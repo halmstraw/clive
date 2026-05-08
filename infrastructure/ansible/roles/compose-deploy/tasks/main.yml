@@ -40,4 +40,6 @@
 - name: Start Compose stack
   ansible.builtin.command:
     cmd: docker compose -f /home/clive/compose/docker-compose.yml up -d postgres minio
+  become: true
   become_user: clive
+  changed_when: true

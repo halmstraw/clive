@@ -101,7 +101,7 @@ without flagging it.
 All architectural decisions are in DECISIONS.md, maintained live in Notion:
 https://www.notion.so/3574837a97d381568100cd1370c68264
 
-Highest decision ID at time of writing: D-078.
+Highest decision ID at time of writing: D-089.
 
 If implementation reveals a gap or conflict not covered by existing
 decisions, stop and flag it. Do not resolve design questions in code.

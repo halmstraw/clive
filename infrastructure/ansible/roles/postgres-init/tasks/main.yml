@@ -6,7 +6,9 @@
   until: pg_ready.rc == 0
   retries: 10
   delay: 5
+  become: true
   become_user: clive
+  changed_when: false
 
 - name: Create SQL staging directory
   ansible.builtin.file:
@@ -37,4 +39,6 @@
     - 03_roles.sql
     - 04_audit_table.sql
     - 05_application_tables.sql
+  become: true
   become_user: clive
+  changed_when: true

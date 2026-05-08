@@ -29,6 +29,7 @@ jobs:
       - name: Ansible lint
         run: |
           pip install ansible-lint
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
           ansible-lint infrastructure/ansible/playbook.yml
 
       - name: Create stub secrets file for Compose validation (D-084)

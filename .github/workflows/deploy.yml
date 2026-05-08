@@ -93,7 +93,7 @@ jobs:
           docker compose -f infrastructure/compose/docker-compose.yml ps --format json \
           | python3 -c '
           import json, sys
-          services = json.load(sys.stdin)
+          services = [json.loads(l) for l in sys.stdin if l.strip()]
           failing = [s["Name"] for s in services if s["State"] != "running"]
           if failing:
               print("FAIL:", failing)

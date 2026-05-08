@@ -1,5 +1,20 @@
 services:
 
+  seed:
+    build:
+      context: ../../src/seed
+      dockerfile: Dockerfile
+    container_name: clive-seed
+    restart: "no"
+    env_file: /etc/clive/secrets.env
+    environment:
+      - POSTGRES_HOST=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - clive-internal
+
   orchestrator:
     image: ghcr.io/halmstraw/clive-orchestrator:${ORCHESTRATOR_IMAGE_TAG:-latest}
     container_name: clive-orchestrator
@@ -20,6 +35,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

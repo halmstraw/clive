@@ -12,6 +12,7 @@ dependencies = [
     "structlog>=24.1",
     "python-dotenv>=1.0",
     "aiohttp>=3.9",                # HTTP server for receiving push responses from Block 13
+    "asyncpg>=0.29",               # PostgreSQL async driver for system document activation (D-079)
 ]
 
 [project.optional-dependencies]

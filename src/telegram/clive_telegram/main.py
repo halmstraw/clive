@@ -16,7 +16,16 @@ from dotenv import load_dotenv
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from .auth import get_owner_chat_id
-from .bot import deliver_alert, deliver_response, handle_message, handle_start, set_app
+from .bot import (
+    deliver_alert,
+    deliver_response,
+    handle_activate,
+    handle_confirm_activate,
+    handle_message,
+    handle_start,
+    set_app,
+)
+from . import db
 
 load_dotenv("/etc/clive/secrets.env")
 
@@ -48,9 +57,14 @@ async def main() -> None:
 
     log.info("telegram_surface_starting", block=23)
 
+    # Initialise DB pool for D-079 system document activation
+    await db.init_pool()
+
     # Build Telegram application
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", handle_start))
+    application.add_handler(CommandHandler("activate", handle_activate))
+    application.add_handler(CommandHandler("confirm_activate", handle_confirm_activate))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     set_app(application)
 

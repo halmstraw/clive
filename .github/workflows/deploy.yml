@@ -102,7 +102,7 @@ jobs:
           '
 
       - name: Verify Block 13 health
-        run: curl -sf http://localhost:8080/health || exit 1
+        run: docker exec clive-orchestrator curl -sf http://localhost:8080/health
 
       - name: Trigger rollback on failure
         if: failure()

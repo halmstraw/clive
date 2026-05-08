@@ -10,14 +10,17 @@ terraform {
     # Hetzner Object Storage S3-compatible backend
     # Bootstrap this bucket manually before first terraform apply
     # See docs/runbooks/terraform-bootstrap.md
-    endpoint                    = "https://fsn1.your-objectstorage.com"
+    endpoints = {
+      s3 = "https://fsn1.your-objectstorage.com"
+    }
     bucket                      = "clive-terraform-state"
     key                         = "v0.1/terraform.tfstate"
     region                      = "main"
     skip_credentials_validation = true
     skip_metadata_api_check     = true
     skip_region_validation      = true
-    force_path_style            = true
+    skip_requesting_account_id  = true
+    use_path_style              = true
   }
 
   required_version = ">= 1.6"
@@ -63,7 +66,7 @@ resource "hcloud_firewall" "clive" {
 # VM
 resource "hcloud_server" "clive" {
   name        = "clive-v01"
-  server_type = "cx21"
+  server_type = "cpx22"
   image       = "ubuntu-24.04"
   location    = "fsn1"
 

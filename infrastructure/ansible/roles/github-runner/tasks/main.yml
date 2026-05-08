@@ -38,6 +38,7 @@
       - --unattended
       - --replace
     creates: /home/clive/actions-runner/.runner
+  become: true
   become_user: clive
   no_log: true
 

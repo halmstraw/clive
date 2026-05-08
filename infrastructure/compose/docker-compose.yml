@@ -80,7 +80,7 @@ services:
       - POSTGRES_USER=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init:/docker-entrypoint-initdb.d:ro
+      - /home/clive/compose/sql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-d", "clive"]
       interval: 10s

@@ -44,16 +44,44 @@
   changed_when: true
 
 - name: Set clive_audit_writer password
-  ansible.builtin.shell:
-    cmd: "docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres psql -U postgres -d clive -c \"ALTER ROLE clive_audit_writer PASSWORD '{{ audit_writer_password }}'\""
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - /home/clive/compose/docker-compose.yml
+      - exec
+      - -T
+      - postgres
+      - psql
+      - -U
+      - postgres
+      - -d
+      - clive
+      - -c
+      - "ALTER ROLE clive_audit_writer PASSWORD '{{ audit_writer_password }}'"
   become: true
   become_user: clive
   changed_when: true
   no_log: true
 
 - name: Set clive_app password
-  ansible.builtin.shell:
-    cmd: "docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres psql -U postgres -d clive -c \"ALTER ROLE clive_app PASSWORD '{{ app_db_password }}'\""
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - /home/clive/compose/docker-compose.yml
+      - exec
+      - -T
+      - postgres
+      - psql
+      - -U
+      - postgres
+      - -d
+      - clive
+      - -c
+      - "ALTER ROLE clive_app PASSWORD '{{ app_db_password }}'"
   become: true
   become_user: clive
   changed_when: true

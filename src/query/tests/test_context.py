@@ -32,12 +32,13 @@ def test_assemble_no_chunks():
 
 
 def test_history_truncation():
-    long_history = [{"role": "user", "content": "x" * 500}] * 50
+    # 100 messages × 10,000 chars = 1M chars ≈ 250k tokens — exceeds ~93k token history alloc
+    long_history = [{"role": "user", "content": "x" * 10_000}] * 100
     result = assemble(
         personality=PERSONALITY,
         alignment_rules=ALIGNMENT,
         conversation_history=long_history,
         retrieved_chunks=[],
     )
-    # Should not include all 50 messages — truncated to budget
-    assert len(result.conversation_history) < 50
+    # Should not include all 100 messages — truncated to budget
+    assert len(result.conversation_history) < 100

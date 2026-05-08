@@ -1,0 +1,13 @@
+---
+- name: Configure CLIVE production server
+  hosts: clive
+  become: true
+  vars_files:
+    - vault.yml  # ansible-vault encrypted; contains secrets — never committed unencrypted
+
+  roles:
+    - base
+    - docker
+    - clive-secrets
+    - postgres-init
+    - backup-cron

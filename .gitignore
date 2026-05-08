@@ -1,0 +1,34 @@
+# Terraform
+infrastructure/terraform/terraform.tfvars
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.backup
+infrastructure/terraform/.terraform.lock.hcl
+infrastructure/terraform/tfplan
+
+# Ansible
+infrastructure/ansible/inventory
+infrastructure/ansible/vault.yml
+
+# Compose secrets
+infrastructure/compose/.env
+
+# CLIVE runtime secrets
+/etc/clive/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

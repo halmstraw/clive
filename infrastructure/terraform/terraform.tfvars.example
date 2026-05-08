@@ -1,0 +1,3 @@
+hcloud_token   = ""
+ssh_public_key = ""
+owner_ip       = ""

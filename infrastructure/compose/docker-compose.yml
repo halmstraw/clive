@@ -1,0 +1,118 @@
+services:
+
+  orchestrator:
+    image: ghcr.io/clive-owner/clive-orchestrator:${ORCHESTRATOR_IMAGE_TAG:-latest}
+    container_name: clive-orchestrator
+    restart: always
+    env_file: /etc/clive/secrets.env
+    environment:
+      - CLIVE_ENV=production
+      - CLIVE_ZONE=personal
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - MINIO_ENDPOINT=http://minio:9000
+      - TELEGRAM_SERVICE_URL=http://telegram:8082
+      - QUERY_SERVICE_URL=http://query:8081
+    volumes:
+      - /data/clive:/data/clive
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - clive-internal
+
+  query:
+    image: ghcr.io/clive-owner/clive-query:${QUERY_IMAGE_TAG:-latest}
+    container_name: clive-query
+    restart: always
+    env_file: /etc/clive/secrets.env
+    environment:
+      - CLIVE_ENV=production
+      - ORCHESTRATOR_URL=http://orchestrator:8080
+      - CLIVE_LLM_MODEL=anthropic/claude-sonnet-4-20250514
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - clive-internal
+
+  telegram:
+    image: ghcr.io/clive-owner/clive-telegram:${TELEGRAM_IMAGE_TAG:-latest}
+    container_name: clive-telegram
+    restart: always
+    env_file: /etc/clive/secrets.env
+    environment:
+      - CLIVE_ENV=production
+      - ORCHESTRATOR_URL=http://orchestrator:8080
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - clive-internal
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: clive-postgres
+    restart: always
+    env_file: /etc/clive/secrets.env
+    environment:
+      - POSTGRES_DB=clive
+      - POSTGRES_USER=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "clive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - clive-internal
+
+  minio:
+    image: minio/minio:latest
+    container_name: clive-minio
+    restart: always
+    env_file: /etc/clive/secrets.env
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - clive-internal
+    # Console (9001) and API (9000) intentionally not exposed on host
+    # All access is container-network only
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  clive-internal:
+    driver: bridge

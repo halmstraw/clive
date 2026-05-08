@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-validate:
+    name: Lint and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform format check
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+      - run: terraform fmt --check
+        working-directory: infrastructure/terraform
+
+      - name: Terraform validate
+        run: |
+          terraform init -backend=false
+          terraform validate
+        working-directory: infrastructure/terraform
+
+      - name: Ansible lint
+        uses: ansible/ansible-lint-action@v6
+        with:
+          path: infrastructure/ansible/playbook.yml
+
+      - name: Docker Compose config dry-run
+        run: docker compose -f infrastructure/compose/docker-compose.yml config
+        env:
+          ORCHESTRATOR_IMAGE_TAG: latest
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: clive_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run SQL init scripts (idempotency test)
+        run: |
+          for f in infrastructure/sql/init/*.sql; do
+            echo "Running $f..."
+            PGPASSWORD=testpassword psql -h localhost -U postgres -d clive_test -f "$f"
+          done
+          # Run twice to verify idempotency
+          for f in infrastructure/sql/init/*.sql; do
+            echo "Re-running $f (idempotency check)..."
+            PGPASSWORD=testpassword psql -h localhost -U postgres -d clive_test -f "$f"
+          done
+        env:
+          PGPASSWORD: testpassword
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run orchestrator unit tests
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -v
+        working-directory: src/orchestrator
+
+      - name: Run query service unit tests
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -v
+        working-directory: src/query

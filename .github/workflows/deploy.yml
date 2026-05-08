@@ -1,0 +1,141 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    outputs:
+      orchestrator_tag: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: echo "sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push orchestrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/orchestrator
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clive-orchestrator:${{ steps.meta.outputs.sha }}
+
+      - name: Build and push query image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/query
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clive-query:${{ steps.meta.outputs.sha }}
+
+      - name: Build and push telegram image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/telegram
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clive-telegram:${{ steps.meta.outputs.sha }}
+
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CLIVE_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H ${{ secrets.CLIVE_SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Run Ansible if playbook changed
+        if: contains(github.event.head_commit.modified, 'infrastructure/ansible/')
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          echo "$ANSIBLE_VAULT_PASSWORD" > /tmp/vault_pass
+          ansible-playbook \
+            -i infrastructure/ansible/inventory \
+            --vault-password-file /tmp/vault_pass \
+            infrastructure/ansible/playbook.yml
+          rm /tmp/vault_pass
+
+      - name: Apply Terraform if changed
+        if: contains(github.event.head_commit.modified, 'infrastructure/terraform/')
+        env:
+          TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_ssh_public_key: ${{ secrets.CLIVE_SSH_PUBLIC_KEY }}
+          TF_VAR_owner_ip: ${{ secrets.OWNER_IP }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
+        run: |
+          cd infrastructure/terraform
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply tfplan
+
+      - name: Deploy services
+        run: |
+          ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
+            "ORCHESTRATOR_IMAGE_TAG=${{ needs.build.outputs.orchestrator_tag }} \
+             QUERY_IMAGE_TAG=${{ needs.build.outputs.orchestrator_tag }} \
+             TELEGRAM_IMAGE_TAG=${{ needs.build.outputs.orchestrator_tag }} \
+             docker compose -f /home/clive/compose/docker-compose.yml \
+             up -d --pull always"
+
+  verify:
+    name: Verify deployment
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    steps:
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CLIVE_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H ${{ secrets.CLIVE_SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Verify containers running
+        run: |
+          ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
+            "docker compose -f /home/clive/compose/docker-compose.yml ps --format json" \
+            | python3 -c "
+import json, sys
+services = json.load(sys.stdin)
+for s in services:
+    if s['State'] != 'running':
+        print(f'FAIL: {s[\"Name\"]} is {s[\"State\"]}')
+        sys.exit(1)
+print('All services running')
+"
+
+      - name: Verify Block 13 health
+        run: |
+          ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
+            "curl -sf http://localhost:8080/health || exit 1"
+
+      - name: Trigger rollback on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'rollback.yml',
+              ref: 'main',
+              inputs: { reason: 'verify-failed', sha: context.sha }
+            })

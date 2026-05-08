@@ -1,0 +1,105 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: true
+
+- name: Install base packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - ntp
+      - curl
+      - git
+      - htop
+    state: present
+
+- name: Configure unattended upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+
+- name: Configure fail2ban SSH jail
+  copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      maxretry = 5
+      bantime  = 3600
+  notify: restart fail2ban
+
+- name: Enable and start fail2ban
+  systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Set UFW default deny inbound
+  ufw:
+    default: deny
+    direction: incoming
+
+- name: Set UFW default allow outbound
+  ufw:
+    default: allow
+    direction: outgoing
+
+- name: Allow SSH from owner IP only
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    src: "{{ owner_ip }}"
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+- name: Configure NTP
+  systemd:
+    name: ntp
+    enabled: true
+    state: started
+
+- name: Create clive service user
+  user:
+    name: clive
+    shell: /bin/bash
+    groups: docker
+    append: true
+    create_home: true
+    system: false
+
+- name: Create /etc/clive directory
+  file:
+    path: /etc/clive
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0750"
+
+- name: Create /data/clive directory
+  file:
+    path: /data/clive
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0750"
+
+handlers:
+  - name: restart fail2ban
+    systemd:
+      name: fail2ban
+      state: restarted

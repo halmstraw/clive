@@ -47,3 +47,9 @@
     enabled: true
     state: started
 
+- name: Add clive user to docker group
+  user:
+    name: clive
+    groups: docker
+    append: true
+

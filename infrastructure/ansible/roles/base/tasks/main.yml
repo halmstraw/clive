@@ -76,8 +76,6 @@
   user:
     name: clive
     shell: /bin/bash
-    groups: docker
-    append: true
     create_home: true
     system: false
 

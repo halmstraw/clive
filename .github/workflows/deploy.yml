@@ -72,7 +72,7 @@ jobs:
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
-            up -d --pull always
+            up -d --pull always --no-deps orchestrator query telegram
 
   verify:
     name: Verify deployment

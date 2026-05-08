@@ -31,10 +31,20 @@ jobs:
         with:
           path: infrastructure/ansible/playbook.yml
 
+      - name: Create stub secrets file for Compose validation (D-084)
+        run: |
+          sudo mkdir -p /etc/clive
+          # Generate empty-value stub from the secrets listed in .env.example
+          grep -E '^#\s+[A-Z_]+=\s*$' infrastructure/compose/.env.example \
+            | sed 's/^#[[:space:]]*//' \
+            > /etc/clive/secrets.env
+
       - name: Docker Compose config dry-run
-        run: docker compose -f infrastructure/compose/docker-compose.yml config
+        run: docker compose -f infrastructure/compose/docker-compose.yml config --quiet
         env:
           ORCHESTRATOR_IMAGE_TAG: latest
+          QUERY_IMAGE_TAG: latest
+          TELEGRAM_IMAGE_TAG: latest
 
   test:
     name: Test

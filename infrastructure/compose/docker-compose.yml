@@ -1,7 +1,7 @@
 services:
 
   orchestrator:
-    image: ghcr.io/clive-owner/clive-orchestrator:${ORCHESTRATOR_IMAGE_TAG:-latest}
+    image: ghcr.io/halmstraw/clive-orchestrator:${ORCHESTRATOR_IMAGE_TAG:-latest}
     container_name: clive-orchestrator
     restart: always
     env_file: /etc/clive/secrets.env
@@ -30,7 +30,7 @@ services:
       - clive-internal
 
   query:
-    image: ghcr.io/clive-owner/clive-query:${QUERY_IMAGE_TAG:-latest}
+    image: ghcr.io/halmstraw/clive-query:${QUERY_IMAGE_TAG:-latest}
     container_name: clive-query
     restart: always
     env_file: /etc/clive/secrets.env
@@ -51,7 +51,7 @@ services:
       - clive-internal
 
   telegram:
-    image: ghcr.io/clive-owner/clive-telegram:${TELEGRAM_IMAGE_TAG:-latest}
+    image: ghcr.io/halmstraw/clive-telegram:${TELEGRAM_IMAGE_TAG:-latest}
     container_name: clive-telegram
     restart: always
     env_file: /etc/clive/secrets.env

@@ -38,7 +38,8 @@ jobs:
           # Generate empty-value stub from the secrets listed in .env.example
           grep -E '^#\s+[A-Z_]+=\s*$' infrastructure/compose/.env.example \
             | sed 's/^#[[:space:]]*//' \
-            > /etc/clive/secrets.env
+            | sudo tee /etc/clive/secrets.env > /dev/null
+          sudo chmod 644 /etc/clive/secrets.env
 
       - name: Docker Compose config dry-run
         run: docker compose -f infrastructure/compose/docker-compose.yml config --quiet

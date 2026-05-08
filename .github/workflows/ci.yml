@@ -27,9 +27,9 @@ jobs:
         working-directory: infrastructure/terraform
 
       - name: Ansible lint
-        uses: ansible/ansible-lint-action@v6
-        with:
-          path: infrastructure/ansible/playbook.yml
+        run: |
+          pip install ansible-lint
+          ansible-lint infrastructure/ansible/playbook.yml
 
       - name: Create stub secrets file for Compose validation (D-084)
         run: |

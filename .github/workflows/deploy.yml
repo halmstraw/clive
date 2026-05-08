@@ -112,15 +112,15 @@ jobs:
         run: |
           ssh clive@${{ secrets.CLIVE_SERVER_IP }} \
             "docker compose -f /home/clive/compose/docker-compose.yml ps --format json" \
-            | python3 -c "
-import json, sys
-services = json.load(sys.stdin)
-for s in services:
-    if s['State'] != 'running':
-        print(f'FAIL: {s[\"Name\"]} is {s[\"State\"]}')
-        sys.exit(1)
-print('All services running')
-"
+          | python3 -c '
+          import json, sys
+          services = json.load(sys.stdin)
+          failing = [s["Name"] for s in services if s["State"] != "running"]
+          if failing:
+              print("FAIL:", failing)
+              sys.exit(1)
+          print("All services running")
+          '
 
       - name: Verify Block 13 health
         run: |

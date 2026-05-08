@@ -47,8 +47,3 @@
     enabled: true
     state: started
 
-handlers:
-  - name: restart docker
-    systemd:
-      name: docker
-      state: restarted

@@ -15,7 +15,6 @@
       - ufw
       - fail2ban
       - unattended-upgrades
-      - ntp
       - curl
       - git
       - htop
@@ -69,7 +68,7 @@
 
 - name: Configure NTP
   systemd:
-    name: ntp
+    name: systemd-timesyncd
     enabled: true
     state: started
 
@@ -98,8 +97,3 @@
     group: clive
     mode: "0750"
 
-handlers:
-  - name: restart fail2ban
-    systemd:
-      name: fail2ban
-      state: restarted

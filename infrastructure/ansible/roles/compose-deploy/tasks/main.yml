@@ -38,5 +38,5 @@
     - 05_application_tables.sql
 
 - name: Start Compose stack
-  command: docker compose -f /home/clive/compose/docker-compose.yml up -d
+  command: docker compose -f /home/clive/compose/docker-compose.yml up -d postgres minio
   become_user: clive

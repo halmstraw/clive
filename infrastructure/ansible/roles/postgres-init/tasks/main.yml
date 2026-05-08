@@ -7,9 +7,16 @@
   delay: 5
   become_user: clive
 
+- name: Create SQL staging directory
+  file:
+    path: /tmp/clive-sql
+    state: directory
+    owner: clive
+    mode: "0750"
+
 - name: Copy SQL init files
   copy:
-    src: "{{ item }}"
+    src: "{{ playbook_dir }}/../sql/init/{{ item }}"
     dest: "/tmp/clive-sql/"
     owner: clive
     mode: "0644"
@@ -18,15 +25,14 @@
     - 02_schemas.sql
     - 03_roles.sql
     - 04_audit_table.sql
+    - 05_application_tables.sql
 
 - name: Run SQL init scripts (idempotent)
-  command: >
-    docker compose -f /home/clive/compose/docker-compose.yml
-    exec -T postgres
-    psql -U postgres -d clive -f /docker-entrypoint-initdb.d/{{ item }}
+  shell: "docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres psql -U postgres -d clive < /tmp/clive-sql/{{ item }}"
   loop:
     - 01_extensions.sql
     - 02_schemas.sql
     - 03_roles.sql
     - 04_audit_table.sql
+    - 05_application_tables.sql
   become_user: clive

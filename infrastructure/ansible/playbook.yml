@@ -9,5 +9,6 @@
     - base
     - docker
     - clive-secrets
+    - compose-deploy
     - postgres-init
     - backup-cron

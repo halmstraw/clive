@@ -1,0 +1,42 @@
+---
+- name: Create compose directory
+  file:
+    path: /home/clive/compose
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0750"
+
+- name: Create SQL init directory for postgres volume mount
+  file:
+    path: /home/clive/compose/sql/init
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0750"
+
+- name: Copy docker-compose.yml
+  copy:
+    src: "{{ playbook_dir }}/../../compose/docker-compose.yml"
+    dest: /home/clive/compose/docker-compose.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy SQL init files for postgres volume mount
+  copy:
+    src: "{{ playbook_dir }}/../sql/init/{{ item }}"
+    dest: /home/clive/compose/sql/init/
+    owner: clive
+    group: clive
+    mode: "0644"
+  loop:
+    - 01_extensions.sql
+    - 02_schemas.sql
+    - 03_roles.sql
+    - 04_audit_table.sql
+    - 05_application_tables.sql
+
+- name: Start Compose stack
+  command: docker compose -f /home/clive/compose/docker-compose.yml up -d
+  become_user: clive

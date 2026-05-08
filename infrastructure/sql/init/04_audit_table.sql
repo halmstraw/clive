@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS clive_audit.event_log (
   routing_outcome  text        NOT NULL,
   conversation_id  uuid,
   zone_scope       text        NOT NULL DEFAULT 'personal',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE (event_id)
 );
 
 -- Immutable constraint: no updates or deletes at application layer
@@ -22,6 +23,6 @@ REVOKE UPDATE, DELETE ON clive_audit.event_log FROM clive_app;
 GRANT INSERT ON clive_audit.event_log TO clive_audit_writer;
 
 -- Index for correlation and replay
-CREATE INDEX IF NOT EXISTS idx_audit_event_id ON clive_audit.event_log (event_id);
+-- idx_audit_event_id omitted: UNIQUE (event_id) constraint creates the index implicitly
 CREATE INDEX IF NOT EXISTS idx_audit_conversation ON clive_audit.event_log (conversation_id) WHERE conversation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON clive_audit.event_log (timestamp);

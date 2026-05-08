@@ -33,7 +33,7 @@ jobs:
           pip install ansible-lint
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
           echo "$ANSIBLE_VAULT_PASSWORD" > /tmp/vault_pass
-          ansible-lint --vault-id default@/tmp/vault_pass infrastructure/ansible/playbook.yml
+          ANSIBLE_VAULT_PASSWORD_FILE=/tmp/vault_pass ansible-lint infrastructure/ansible/playbook.yml
           rm -f /tmp/vault_pass
 
       - name: Create stub secrets file for Compose validation (D-084)

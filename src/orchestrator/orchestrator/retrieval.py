@@ -61,17 +61,26 @@ async def retrieve(
         # Reranking applied in application code after initial fetch
         rows = await conn.fetch(
             """
-            SELECT
-                chunk_id,
-                content,
-                source_attribution,
-                zone_of_origin,
-                ts_rank_cd(to_tsvector('english', content),
-                           plainto_tsquery('english', $1)) AS text_score,
-                1 - (embedding <=> (SELECT embedding FROM clive_search.chunks
-                     WHERE content = $1 LIMIT 1)) AS vector_score
-            FROM clive_search.chunks
-            WHERE zone_of_origin = $2
+            SELECT * FROM (
+                SELECT
+                    chunk_id,
+                    content,
+                    source_attribution,
+                    zone_of_origin,
+                    ts_rank_cd(
+                        to_tsvector('english', content),
+                        plainto_tsquery('english', $1)
+                    ) AS text_score,
+                    COALESCE(
+                        1 - (embedding <=> (
+                            SELECT embedding FROM clive_search.chunks
+                            WHERE content = $1 LIMIT 1
+                        )),
+                        0.0
+                    ) AS vector_score
+                FROM clive_search.chunks
+                WHERE zone_of_origin = $2
+            ) ranked
             ORDER BY text_score + vector_score DESC
             LIMIT $3
             """,

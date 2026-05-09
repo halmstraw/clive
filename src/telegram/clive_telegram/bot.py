@@ -300,6 +300,11 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
                     uuid.UUID(confirmed_version_id),
                     document_type,
                 )
+                # Guard before emit — raises so asyncpg rolls back both UPDATEs.
+                if not updated:
+                    raise ValueError(
+                        f"version_id {confirmed_version_id} not found for {document_type}"
+                    )
                 # Emit inside the transaction — if this raises, asyncpg rolls back
                 # both UPDATEs so the document state is left unchanged (D-080).
                 await _emit_to_orchestrator(
@@ -311,13 +316,6 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
                         "activated_by": "owner",
                     },
                 )
-
-        if not updated:
-            await update.message.reply_text(
-                f"Activation failed: version `{confirmed_version_id}` not found.",
-                parse_mode="Markdown",
-            )
-            return
 
     except Exception as exc:
         log.error(

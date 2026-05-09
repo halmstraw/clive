@@ -232,10 +232,9 @@ async def handle_activate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.message.reply_text(
         f"Pending {document_type} document found.\n"
-        f"Version: `{version_id}`\n\n"
+        f"Version: {version_id}\n\n"
         f"Preview:\n{preview}\n\n"
-        f"Reply `/confirm_activate {version_id}` to activate.",
-        parse_mode="Markdown",
+        f"Reply /confirm_activate {version_id} to activate."
     )
 
 

@@ -148,13 +148,22 @@ jobs:
                (gen_random_uuid(), 'test', 13, now(), \
                 'hash', 'pass', 'test', 'personal');"
 
-      - name: Assert clive_audit_writer cannot SELECT from event_log
+      - name: Assert clive_audit_writer cannot UPDATE event_log
         env:
           PGPASSWORD: testpassword
         run: |
           psql -h localhost -U postgres -d clive -c \
             "SET ROLE clive_audit_writer; \
-             SELECT count(*) FROM clive_audit.event_log;" \
+             UPDATE clive_audit.event_log SET zone_scope = 'personal' WHERE false;" \
+            2>&1 | grep -q "permission denied"
+
+      - name: Assert clive_audit_writer cannot DELETE from event_log
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_audit_writer; \
+             DELETE FROM clive_audit.event_log WHERE false;" \
             2>&1 | grep -q "permission denied"
 
       - name: Assert clive_app can SELECT from system_documents

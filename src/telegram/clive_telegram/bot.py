@@ -106,11 +106,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         {
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
-            "zone_scope": "personal",  # D-050
-            "input_text": user_input,
-            "timestamp": update.message.date.isoformat(),
-            "surface_type": "telegram",
-            "auth_metadata": make_auth_metadata(chat_id),  # D-058
+            "zone_scope": "personal",
+            "payload": {
+                "input_text": user_input,
+                "timestamp": update.message.date.isoformat(),
+                "surface_type": "telegram",
+                "auth_metadata": make_auth_metadata(chat_id),
+            },
         },
     )
 

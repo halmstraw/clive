@@ -300,6 +300,17 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
                     uuid.UUID(confirmed_version_id),
                     document_type,
                 )
+                # Emit inside the transaction — if this raises, asyncpg rolls back
+                # both UPDATEs so the document state is left unchanged (D-080).
+                await _emit_to_orchestrator(
+                    "config.changed",
+                    {
+                        "event_id": str(uuid.uuid4()),
+                        "document_type": document_type,
+                        "version_id": confirmed_version_id,
+                        "activated_by": "owner",
+                    },
+                )
 
         if not updated:
             await update.message.reply_text(
@@ -310,12 +321,15 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as exc:
         log.error(
-            "activation_db_error",
+            "activation_failed",
             document_type=document_type,
             version_id=confirmed_version_id,
             error=str(exc),
         )
-        await update.message.reply_text("Activation failed due to a database error.")
+        await update.message.reply_text(
+            "Activation failed — could not record to audit log. "
+            "Your document was not changed. Please try again."
+        )
         return
 
     # Clear the pending state
@@ -326,21 +340,6 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
         document_type=document_type,
         version_id=confirmed_version_id,
     )
-
-    # Emit config.changed event to Block 13 audit bus (D-079)
-    try:
-        await _emit_to_orchestrator(
-            "config.changed",
-            {
-                "event_id": str(uuid.uuid4()),
-                "document_type": document_type,
-                "version_id": confirmed_version_id,
-                "activated_by": "owner",
-            },
-        )
-    except Exception as exc:
-        # Non-fatal: activation succeeded; event emission failure is logged only
-        log.error("config_changed_emit_failed", error=str(exc))
 
     await update.message.reply_text(
         f"Activated. {document_type} v`{confirmed_version_id}` is now live.",

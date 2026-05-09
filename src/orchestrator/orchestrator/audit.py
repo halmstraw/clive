@@ -49,10 +49,6 @@ async def write(event: CLIVEEvent, alignment_result: AlignmentResult, routing_ou
     ).hexdigest()
 
     async with _pool.acquire() as conn:
-        # TEMPORARY: remove after D-080 audit write fault resolved
-        current_user = await conn.fetchval("SELECT current_user")
-        log.info("audit_write_attempt", current_user=current_user,
-                 event_type=event.event_type)
         await conn.execute(
             """
             INSERT INTO clive_audit.event_log

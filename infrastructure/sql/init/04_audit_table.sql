@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS clive_audit.event_log (
 REVOKE UPDATE, DELETE ON clive_audit.event_log FROM clive_app;
 
 -- Grant INSERT to audit writer role
-GRANT INSERT ON clive_audit.event_log TO clive_audit_writer;
+GRANT INSERT, SELECT ON clive_audit.event_log TO clive_audit_writer;
 
 -- Index for correlation and replay
 -- idx_audit_event_id omitted: UNIQUE (event_id) constraint creates the index implicitly

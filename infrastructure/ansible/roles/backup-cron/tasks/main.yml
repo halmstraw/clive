@@ -10,35 +10,19 @@
     cmd: /tmp/rclone-install.sh
     creates: /usr/bin/rclone
 
-- name: Create rclone config directory
-  ansible.builtin.file:
-    path: /home/clive/.config/rclone
-    state: directory
-    owner: clive
-    group: clive
-    mode: "0700"
-
-- name: Write rclone config for MinIO backup target
-  ansible.builtin.copy:
-    dest: /home/clive/.config/rclone/rclone.conf
-    owner: clive
-    group: clive
+- name: Write rclone config to /etc/clive/rclone.conf
+  ansible.builtin.template:
+    src: rclone.conf.j2
+    dest: /etc/clive/rclone.conf
+    owner: root
+    group: root
     mode: "0600"
-    content: |
-      [minio-local]
-      type = s3
-      provider = Minio
-      endpoint = http://localhost:9000
-      access_key_id = {{ minio_root_user }}
-      secret_access_key = {{ minio_root_password }}
-
-      [minio-backup]
-      type = s3
-      provider = Other
-      endpoint = {{ backup_s3_endpoint }}
-      access_key_id = {{ backup_s3_access_key }}
-      secret_access_key = {{ backup_s3_secret_key }}
   no_log: true
+
+- name: Remove insecure rclone config from clive home if present
+  ansible.builtin.file:
+    path: /home/clive/.config/rclone/rclone.conf
+    state: absent
 
 - name: Create backup log directory
   ansible.builtin.file:
@@ -70,4 +54,6 @@
     user: clive
     hour: "2"
     minute: "0"
-    job: /usr/local/bin/clive-backup
+    job: >-
+      docker compose -f /home/clive/compose/docker-compose.yml
+      run --rm backup >> /var/log/clive/backup.log 2>&1

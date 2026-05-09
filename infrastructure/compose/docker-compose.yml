@@ -126,6 +126,18 @@ services:
     # Console (9001) and API (9000) intentionally not exposed on host
     # All access is container-network only
 
+  backup:
+    image: rclone/rclone:latest
+    container_name: clive-backup
+    restart: "no"
+    volumes:
+      - /etc/clive/rclone.conf:/root/.config/rclone/rclone.conf:ro
+    command: >
+      sync minio-local:clive-raw minio-backup:clive-raw-backup
+      --log-level INFO
+    networks:
+      - clive-internal
+
 volumes:
   postgres_data:
   minio_data:

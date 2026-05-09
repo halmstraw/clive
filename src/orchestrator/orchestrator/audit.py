@@ -31,7 +31,7 @@ async def init_pool() -> None:
         f"postgresql://clive_audit_writer:{os.environ['AUDIT_WRITER_PASSWORD']}"
         f"@{os.environ.get('POSTGRES_HOST', 'postgres')}:5432/clive"
     )
-    _pool = await asyncpg.create_pool(dsn, min_size=1, max_size=3)
+    _pool = await asyncpg.create_pool(dsn, min_size=1, max_size=3, statement_cache_size=0)
     log.info("audit_pool_initialised")
 
 

@@ -103,3 +103,73 @@ jobs:
           pip install -e ".[dev]"
           python -m pytest tests/ -v
         working-directory: src/query
+
+  test-db:
+    name: Database role privilege tests
+    runs-on: ubuntu-latest
+    needs: lint-validate
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: clive
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run SQL init scripts
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          for f in $(ls infrastructure/sql/init/*.sql | sort); do
+            echo "Running $f..."
+            psql -h localhost -U postgres -d clive -f "$f"
+          done
+
+      - name: Assert clive_audit_writer can INSERT into event_log
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_audit_writer; \
+             INSERT INTO clive_audit.event_log \
+               (event_id, event_type, source_block, timestamp, \
+                payload_hash, alignment_result, routing_outcome, zone_scope) \
+             VALUES \
+               (gen_random_uuid(), 'test', 13, now(), \
+                'hash', 'pass', 'test', 'personal');"
+
+      - name: Assert clive_audit_writer cannot SELECT from event_log
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_audit_writer; \
+             SELECT count(*) FROM clive_audit.event_log;" \
+            2>&1 | grep -q "permission denied"
+
+      - name: Assert clive_app can SELECT from system_documents
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.system_documents;"
+
+      - name: Assert clive_app cannot access event_log
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_audit.event_log;" \
+            2>&1 | grep -q "permission denied"

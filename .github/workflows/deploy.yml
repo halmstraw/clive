@@ -65,6 +65,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Seed system documents
+        run: |
+          docker compose -f infrastructure/compose/docker-compose.yml \
+            build seed
+          docker compose -f infrastructure/compose/docker-compose.yml \
+            run --rm seed
+
+      - name: Sync compose file to /home/clive/compose
+        run: |
+          cp infrastructure/compose/docker-compose.yml \
+            /home/clive/compose/docker-compose.yml
+
       - name: Deploy services
         env:
           ORCHESTRATOR_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}

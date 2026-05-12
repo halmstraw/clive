@@ -68,7 +68,11 @@ Confirm: output ends with `failed=0` for all hosts. Any `changed` tasks are expe
 
 ## 4. MinIO bucket creation
 
-The `clive-raw` bucket must exist before the first backup run. The backup container will fail with a "directory not found" error if skipped.
+The `clive-raw` bucket must exist before:
+- The first ingestion run (Block 14 uploads raw documents here — D-094 T9)
+- The first backup run (backup-cron syncs from this bucket)
+
+Block 14 will surface a clear error if the bucket is missing; it will not create it silently.
 
 SSH to the VM, then:
 
@@ -80,6 +84,8 @@ docker exec clive-minio mc mb local/clive-raw
 ```
 
 Confirm: `Bucket created successfully. \`local/clive-raw\``
+
+> **Note:** this step is a v0.2 prerequisite — the ingestion pipeline (Block 14 + Block 15) will reject uploads with a clear error message if the bucket is absent.  Do not rely on error messages to discover this; complete this step before sending any `/ingest` commands.
 
 ---
 

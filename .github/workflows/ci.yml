@@ -51,6 +51,7 @@ jobs:
           ORCHESTRATOR_IMAGE_TAG: latest
           QUERY_IMAGE_TAG: latest
           TELEGRAM_IMAGE_TAG: latest
+          PROCESSING_IMAGE_TAG: latest
 
   test:
     name: Test
@@ -87,12 +88,23 @@ jobs:
         env:
           PGPASSWORD: testpassword
 
+      - name: Run SQL init scripts (schema setup for integration tests)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          for f in $(ls infrastructure/sql/init/*.sql | sort); do
+            echo "Running $f..."
+            psql -h localhost -U postgres -d clive_test -f "$f"
+          done
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Run orchestrator unit tests
+      - name: Run orchestrator unit + integration tests
+        env:
+          TEST_DB_URL: "postgresql://postgres:testpassword@localhost:5432/clive_test"
         run: |
           pip install -e ".[dev]"
           python -m pytest tests/ -v
@@ -103,6 +115,12 @@ jobs:
           pip install -e ".[dev]"
           python -m pytest tests/ -v
         working-directory: src/query
+
+      - name: Run telegram rendering tests
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -v
+        working-directory: src/telegram
 
   test-db:
     name: Database role privilege tests
@@ -181,4 +199,27 @@ jobs:
           psql -h localhost -U postgres -d clive -c \
             "SET ROLE clive_app; \
              SELECT count(*) FROM clive_audit.event_log;" \
+            2>&1 | grep -q "permission denied"
+
+      - name: Assert clive_audit_writer cannot read clive_search.chunks
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_audit_writer; \
+             SELECT count(*) FROM clive_search.chunks;" \
+            2>&1 | grep -q "permission denied"
+
+      - name: Assert clive_app cannot write to audit log
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             INSERT INTO clive_audit.event_log \
+               (event_id, event_type, source_block, timestamp, \
+                payload_hash, alignment_result, routing_outcome, zone_scope) \
+             VALUES \
+               (gen_random_uuid(), 'test', 13, now(), \
+                'hash', 'pass', 'test', 'personal');" \
             2>&1 | grep -q "permission denied"

@@ -359,7 +359,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     Flow:
       1. Validate file size (D-098)
       2. Download file bytes from Telegram
-      3. Upload to MinIO clive-raw bucket
+      3. Upload to MinIO clive-raw-store bucket (MINIO_RAW_BUCKET)
       4. Emit ingest.received to Block 13
       5. Reply with immediate acknowledgement
     """
@@ -416,7 +416,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except RuntimeError as exc:
         log.error("minio_upload_failed", source_key=source_key, error=str(exc))
         await update.message.reply_text(
-            "Could not store the file. Check that the MinIO clive-raw bucket exists."
+            "Could not store the file. Check that the MinIO clive-raw-store bucket exists."
         )
         return
 

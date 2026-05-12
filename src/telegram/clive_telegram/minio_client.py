@@ -1,6 +1,6 @@
 """MinIO client for Block 14 raw document upload.
 
-Uploads inbound files to the clive-raw bucket so Block 15 can fetch them.
+Uploads inbound files to the clive-raw-store bucket so Block 15 can fetch them.
 If the bucket does not exist, raises a clear error — bucket creation is a
 bootstrap prerequisite (D-094 T9, D-099 criterion 4).
 """
@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 
 log = structlog.get_logger()
 
-MINIO_BUCKET = "clive-raw"
+MINIO_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "clive-raw-store")
 
 
 def _get_s3_client() -> Any:
@@ -31,7 +31,7 @@ def _get_s3_client() -> Any:
 
 
 async def upload_document(source_key: str, data: bytes, content_type: str) -> None:
-    """Upload raw document bytes to clive-raw bucket.
+    """Upload raw document bytes to clive-raw-store bucket.
 
     Raises RuntimeError if the bucket does not exist — this is a bootstrap
     prerequisite that must be resolved by the operator, not silently created.

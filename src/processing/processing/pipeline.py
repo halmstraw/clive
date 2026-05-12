@@ -4,7 +4,7 @@ Receives ingest.received events from Block 13, processes documents,
 and emits ingest.processed or ingest.rejected back to Block 13.
 
 Flow:
-  1. Fetch raw document from MinIO clive-raw bucket
+  1. Fetch raw document from MinIO clive-raw-store bucket (MINIO_RAW_BUCKET)
   2. Reject if >10 MB (D-098, defense in depth)
   3. Extract text (PDF or plain text)
   4. Chunk at 512 tokens / 50-token overlap / 50-token minimum (D-097)
@@ -35,7 +35,7 @@ log = structlog.get_logger()
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB — D-098
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
-MINIO_BUCKET = "clive-raw"
+MINIO_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "clive-raw-store")
 EMBED_BATCH_SIZE = 32
 
 

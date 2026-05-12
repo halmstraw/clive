@@ -5,3 +5,5 @@ minio_root_password: ""   # vault: minio_root_password
 backup_s3_endpoint: ""    # vault: backup_s3_endpoint
 backup_s3_access_key: ""  # vault: backup_s3_access_key
 backup_s3_secret_key: ""  # vault: backup_s3_secret_key
+# MinIO bucket names — override in host_vars or group_vars if needed
+minio_raw_bucket: "clive-raw-store"

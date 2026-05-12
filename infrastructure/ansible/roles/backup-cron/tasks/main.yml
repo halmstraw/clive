@@ -44,7 +44,7 @@
       LOG=/var/log/clive/backup.log
       DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
       echo "[${DATE}] Starting MinIO backup" >> $LOG
-      rclone sync minio-local:clive-raw minio-backup:clive-raw-backup \
+      rclone sync minio-local:{{ minio_raw_bucket }} minio-backup:{{ minio_raw_bucket }}-backup \
         --log-file $LOG --log-level INFO
       echo "[${DATE}] Backup complete" >> $LOG
 

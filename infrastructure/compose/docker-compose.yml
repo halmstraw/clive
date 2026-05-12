@@ -56,6 +56,7 @@ services:
       - CLIVE_ENV=production
       - ORCHESTRATOR_URL=http://orchestrator:8080
       - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_RAW_BUCKET=${MINIO_RAW_BUCKET:-clive-raw-store}
       - CLIVE_EMBEDDING_MODEL=text-embedding-3-small
     depends_on:
       orchestrator:
@@ -103,6 +104,7 @@ services:
       - CLIVE_ENV=production
       - ORCHESTRATOR_URL=http://orchestrator:8080
       - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_RAW_BUCKET=${MINIO_RAW_BUCKET:-clive-raw-store}
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -163,7 +165,7 @@ services:
     volumes:
       - /etc/clive/rclone.conf:/root/.config/rclone/rclone.conf:ro
     command: >
-      sync minio-local:clive-raw minio-backup:clive-raw-backup
+      sync minio-local:${MINIO_RAW_BUCKET:-clive-raw-store} minio-backup:${MINIO_RAW_BUCKET:-clive-raw-store}-backup
       --log-level INFO
     networks:
       - clive-internal

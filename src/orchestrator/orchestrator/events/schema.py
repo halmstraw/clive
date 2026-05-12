@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Provenance(str, Enum):
@@ -32,6 +32,8 @@ class CLIVEEvent(BaseModel):
     provenance: Provenance = Provenance.PRODUCTION
     payload: dict[str, Any] = Field(default_factory=dict)
 
+    model_config = ConfigDict(use_enum_values=True)
+
     @model_validator(mode='before')
     @classmethod
     def collect_extras_into_payload(cls, values):
@@ -46,9 +48,6 @@ class CLIVEEvent(BaseModel):
             for k in extras:
                 del values[k]
         return values
-
-    class Config:
-        use_enum_values = True
 
 
 class AlignmentResult(str, Enum):

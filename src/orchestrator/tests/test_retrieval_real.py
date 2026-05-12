@@ -9,6 +9,9 @@ The embedding stored is a fixed 1536-dim test vector (all 0.5).  This means
 vector_score is 0 for all retrieval queries (no exact match in the subquery).
 The text_score from ts_rank_cd drives ranking — which is exactly what this
 test exercises.
+
+asyncpg has no built-in pgvector codec; embeddings are passed as a cast
+string ($N::vector) rather than a Python list.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ import pytest
 
 TEST_DB_URL = os.environ.get("TEST_DB_URL")
 
-TEST_EMBEDDING = [0.5] * 1536
+TEST_EMBEDDING_STR = "[" + ",".join("0.5" for _ in range(1536)) + "]"
 TEST_ZONE = "personal"
 TEST_SOURCE_KEY = "test-integration/clive-test-doc.txt"
 
@@ -44,7 +47,6 @@ async def inserted_chunks(db_conn):
         ("The ingestion pipeline stores embeddings in PostgreSQL with pgvector.", "chunk_hash_2"),
     ]
     for i, (content, content_hash) in enumerate(chunks):
-        # Use unique hashes per test run to avoid conflicts with parallel runs
         run_hash = f"{content_hash}_{uuid.uuid4().hex[:8]}"
         chunk_id = await db_conn.fetchval(
             """
@@ -52,14 +54,14 @@ async def inserted_chunks(db_conn):
               (content, embedding, source_attribution, zone_of_origin,
                position, source_key, content_hash, content_tsv, document_id)
             VALUES
-              ($1, $2, $3, $4, $5, $6, $7,
+              ($1, $2::vector, $3, $4, $5, $6, $7,
                to_tsvector('english', $1),
                gen_random_uuid())
             ON CONFLICT (content_hash) DO NOTHING
             RETURNING chunk_id
             """,
             content,
-            TEST_EMBEDDING,
+            TEST_EMBEDDING_STR,
             TEST_SOURCE_KEY,
             TEST_ZONE,
             i,
@@ -153,12 +155,12 @@ async def test_idempotent_reingest_no_duplicates(db_conn, inserted_chunks):
           (content, embedding, source_attribution, zone_of_origin,
            position, source_key, content_hash, content_tsv, document_id)
         VALUES
-          ('Duplicate content', $1, 'test', 'personal', 99, 'test', $2,
+          ('Duplicate content', $1::vector, 'test', 'personal', 99, 'test', $2,
            to_tsvector('english', 'Duplicate content'),
            gen_random_uuid())
         ON CONFLICT (content_hash) DO NOTHING
         """,
-        TEST_EMBEDDING,
+        TEST_EMBEDDING_STR,
         original_hash,
     )
     assert result == "INSERT 0 0", f"Expected no insert on conflict, got: {result}"

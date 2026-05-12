@@ -16,7 +16,7 @@ import uuid
 import pytest
 
 TEST_DB_URL = os.environ.get("TEST_DB_URL")
-TEST_EMBEDDING = [0.5] * 1536
+TEST_EMBEDDING_STR = "[" + ",".join("0.5" for _ in range(1536)) + "]"
 
 
 # ---------------------------------------------------------------------------
@@ -40,14 +40,14 @@ async def zone_test_chunks():
           (content, embedding, source_attribution, zone_of_origin,
            position, source_key, content_hash, content_tsv, document_id)
         VALUES
-          ('Zone boundary test content', $1, 'test', 'personal', 0,
+          ('Zone boundary test content', $1::vector, 'test', 'personal', 0,
            $2, $3,
            to_tsvector('english', 'Zone boundary test content'),
            gen_random_uuid())
         ON CONFLICT (content_hash) DO NOTHING
         RETURNING chunk_id
         """,
-        TEST_EMBEDDING,
+        TEST_EMBEDDING_STR,
         f"test/zone_{run_id}",
         f"zone_hash_{run_id}",
     )

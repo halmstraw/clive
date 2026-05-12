@@ -31,6 +31,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from .auth import is_authenticated, make_auth_metadata
 from .db import get_pool
+from .minio_client import upload_document
 from .session import sessions
 
 log = structlog.get_logger()
@@ -344,3 +345,141 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
         f"Activated. {document_type} v`{confirmed_version_id}` is now live.",
         parse_mode="Markdown",
     )
+
+
+MAX_INGEST_BYTES = 10 * 1024 * 1024  # 10 MB — D-098
+
+
+async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /ingest caption command — D-101.
+
+    Owner sends a document with /ingest as the caption.  File and command
+    arrive in a single message; no conversational state required.
+
+    Flow:
+      1. Validate file size (D-098)
+      2. Download file bytes from Telegram
+      3. Upload to MinIO clive-raw bucket
+      4. Emit ingest.received to Block 13
+      5. Reply with immediate acknowledgement
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    document = update.message.document
+    if not document:
+        await update.message.reply_text(
+            "Send a file with /ingest as the caption to ingest a document."
+        )
+        return
+
+    # D-098: size check before download
+    if document.file_size and document.file_size > MAX_INGEST_BYTES:
+        log.warning(
+            "ingest_rejected_too_large",
+            chat_id=chat_id,
+            file_name=document.file_name,
+            file_size=document.file_size,
+        )
+        event_id = uuid.uuid4()
+        await _emit_to_orchestrator(
+            "ingest.rejected",
+            {
+                "event_id": str(event_id),
+                "payload": {
+                    "source_key": document.file_name or "unknown",
+                    "reason": "file_too_large",
+                    "file_size": document.file_size,
+                },
+            },
+        )
+        await update.message.reply_text(
+            f"File too large ({document.file_size // (1024 * 1024)} MB). Maximum is 10 MB."
+        )
+        return
+
+    # Download file bytes
+    tg_file = await context.bot.get_file(document.file_id)
+    raw_bytes = bytes(await tg_file.download_as_bytearray())
+
+    # Build a unique object key: uuid/original-filename
+    original_name = document.file_name or "document"
+    source_key = f"{uuid.uuid4()}/{original_name}"
+    content_type = document.mime_type or "application/octet-stream"
+
+    try:
+        await upload_document(source_key, raw_bytes, content_type)
+    except RuntimeError as exc:
+        log.error("minio_upload_failed", source_key=source_key, error=str(exc))
+        await update.message.reply_text(
+            "Could not store the file. Check that the MinIO clive-raw bucket exists."
+        )
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    log.info(
+        "ingest_received",
+        chat_id=chat_id,
+        source_key=source_key,
+        event_id=str(event_id),
+    )
+
+    await _emit_to_orchestrator(
+        "ingest.received",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "zone_scope": "personal",
+            "payload": {
+                "source_key": source_key,
+                "original_filename": original_name,
+                "file_size": document.file_size,
+                "content_type": content_type,
+            },
+        },
+    )
+
+    # D-099 criterion 1: immediate acknowledgement
+    await update.message.reply_text(
+        f"Received {original_name}. Processing — I will follow up when done."
+    )
+
+
+async def deliver_ingest_status(status_payload: dict[str, Any], chat_id: int) -> None:
+    """Deliver ingest.processed or ingest.rejected follow-up to owner.
+
+    Called by the HTTP endpoint that Block 13 pushes ingest status events to.
+    D-099 criterion 1: owner receives follow-up with chunk count on completion.
+    """
+    event_type = status_payload.get("event_type", "")
+    source_key = status_payload.get("source_key", "")
+
+    if event_type == "ingest.processed":
+        chunk_count = status_payload.get("chunk_count", 0)
+        inserted = status_payload.get("inserted_count", chunk_count)
+        filename = source_key.split("/", 1)[-1] if "/" in source_key else source_key
+        text = f"Done. {filename} ingested — {inserted} new chunk(s) stored."
+        if inserted < chunk_count:
+            text += f" ({chunk_count - inserted} duplicate chunk(s) skipped.)"
+    elif event_type == "ingest.rejected":
+        reason = status_payload.get("reason", "unknown")
+        filename = source_key.split("/", 1)[-1] if "/" in source_key else source_key
+        reason_text = {
+            "file_too_large": "file too large",
+            "extraction_failed": "text extraction failed",
+            "fetch_failed": "could not fetch from storage",
+            "no_chunks_produced": "no content found in document",
+        }.get(reason, reason)
+        text = f"Ingestion failed for {filename}: {reason_text}."
+    else:
+        return
+
+    if _app:
+        await _app.bot.send_message(chat_id=chat_id, text=text)
+        log.info("ingest_status_delivered", event_type=event_type, chat_id=chat_id)

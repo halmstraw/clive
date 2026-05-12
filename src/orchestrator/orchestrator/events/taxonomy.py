@@ -21,6 +21,11 @@ PROCESSING_COMPLETED = "processing.completed"
 RETRIEVAL_REQUESTED = "retrieval.requested"
 RETRIEVAL_COMPLETED = "retrieval.completed"
 
+# Ingestion pipeline — Block 14 / Block 15 (D-099, D-101)
+INGEST_RECEIVED = "ingest.received"
+INGEST_PROCESSED = "ingest.processed"
+INGEST_REJECTED = "ingest.rejected"
+
 # Class 3 — Action
 ACTION_PROPOSED = "action.proposed"
 ACTION_DISPATCHED = "action.dispatched"

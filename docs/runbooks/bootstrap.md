@@ -62,34 +62,13 @@ ansible-playbook -i infrastructure/ansible/inventory \
 
 This runs all roles in order: base, docker, clive-secrets, compose-deploy, postgres-init, backup-cron, github-runner.
 
+The `compose-deploy` role starts MinIO and creates the `clive-raw-store` bucket automatically using `mc mb --ignore-existing`. No manual bucket creation step is required.
+
 Confirm: output ends with `failed=0` for all hosts. Any `changed` tasks are expected on first run. Investigate any `failed` before continuing.
 
 ---
 
-## 4. MinIO bucket creation
-
-The `clive-raw-store` bucket must exist before:
-- The first ingestion run (Block 14 uploads raw documents here — D-094 T9)
-- The first backup run (backup-cron syncs from this bucket)
-
-Block 14 will surface a clear error if the bucket is missing; it will not create it silently.
-
-SSH to the VM, then:
-
-```
-source /etc/clive/secrets.env && \
-docker exec clive-minio mc alias set local http://localhost:9000 \
-  $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD && \
-docker exec clive-minio mc mb local/clive-raw-store
-```
-
-Confirm: `Bucket created successfully. \`local/clive-raw-store\``
-
-> **Note:** this step is a v0.2 prerequisite — the ingestion pipeline (Block 14 + Block 15) will reject uploads with a clear error message if the bucket is absent.  Do not rely on error messages to discover this; complete this step before sending any `/ingest` commands.
-
----
-
-## 5. System document seeding and activation
+## 4. System document seeding and activation
 
 The seed container runs automatically at deploy time and inserts `personality` and `alignment_rules` documents with `is_active = false`. Both must be activated explicitly via Telegram before CLIVE responds with personality (D-079 — two-step activation).
 
@@ -111,7 +90,7 @@ The seed container runs automatically at deploy time and inserts `personality` a
 
 ---
 
-## 6. Verify backup
+## 5. Verify backup
 
 Trigger the backup manually to confirm rclone can reach MinIO on the container network and that the destination bucket is reachable:
 
@@ -127,6 +106,6 @@ If the backup fails, check `/var/log/clive/backup.log` for detail.
 
 ---
 
-## 7. Pre-launch checklist
+## 6. Pre-launch checklist
 
 Complete every item in the pre-launch checklist in `CLAUDE.md` before declaring CLIVE operational. Send a test message to @clivesystem_bot and confirm a coherent response is returned.

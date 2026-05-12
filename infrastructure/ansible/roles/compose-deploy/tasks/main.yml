@@ -43,3 +43,22 @@
   become: true
   become_user: clive
   changed_when: true
+
+- name: Wait for MinIO to be healthy
+  ansible.builtin.uri:
+    url: http://localhost:9000/minio/health/live
+    status_code: 200
+  register: minio_health
+  until: minio_health.status == 200
+  retries: 12
+  delay: 5
+
+- name: Create {{ minio_raw_bucket }} bucket in MinIO
+  ansible.builtin.shell: |
+    docker exec clive-minio mc alias set local http://localhost:9000 \
+      "{{ minio_root_user }}" "{{ minio_root_password }}" --quiet
+    docker exec clive-minio mc mb --ignore-existing "local/{{ minio_raw_bucket }}"
+  become_user: clive
+  register: mc_mb_result
+  changed_when: '"Bucket created" in mc_mb_result.stdout'
+  no_log: true

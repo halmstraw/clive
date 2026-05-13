@@ -72,6 +72,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in $(seq 1 12); do
+            docker exec clive-postgres pg_isready -U postgres -d clive && break
+            echo "Waiting for PostgreSQL... ($i/12)"
+            sleep 5
+          done
+          docker exec clive-postgres pg_isready -U postgres -d clive
+
+      - name: Apply database migrations
+        run: |
+          PGPASSWORD=$(grep '^POSTGRES_PASSWORD=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
+          for f in $(ls infrastructure/sql/init/*.sql | sort); do
+            echo "Applying migration: $f"
+            docker exec -e PGPASSWORD="$PGPASSWORD" -i clive-postgres \
+              psql -U postgres -d clive < "$f"
+          done
+
+      - name: Ensure MinIO raw store bucket exists
+        run: |
+          MINIO_ROOT_USER=$(grep '^MINIO_ROOT_USER=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
+          MINIO_ROOT_PASSWORD=$(grep '^MINIO_ROOT_PASSWORD=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
+          RAW_BUCKET=$(grep '^MINIO_RAW_BUCKET=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
+          RAW_BUCKET=${RAW_BUCKET:-clive-raw-store}
+          docker run --rm \
+            --network container:clive-minio \
+            -e MC_HOST_local="http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@localhost:9000" \
+            minio/mc mb --ignore-existing "local/${RAW_BUCKET}"
+
       - name: Seed system documents
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \

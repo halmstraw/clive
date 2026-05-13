@@ -477,6 +477,8 @@ async def deliver_ingest_status(status_payload: dict[str, Any], chat_id: int) ->
             "extraction_failed": "text extraction failed",
             "fetch_failed": "could not fetch from storage",
             "no_chunks_produced": "no content found in document",
+            "embedding_failed": "embedding failed — check OPENAI_API_KEY in secrets",
+            "chunk_write_failed": "failed to write to database",
         }.get(reason, reason)
         text = f"Ingestion failed for {filename}: {reason_text}."
     else:

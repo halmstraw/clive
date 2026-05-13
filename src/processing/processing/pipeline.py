@@ -129,19 +129,50 @@ async def process(event_payload: dict[str, Any]) -> None:
 
     hashes = _content_hashes(chunks)
 
-    # Embed in batches
-    embeddings: list[list[float]] = []
-    for i in range(0, len(chunks), EMBED_BATCH_SIZE):
-        batch = chunks[i : i + EMBED_BATCH_SIZE]
-        batch_embeddings = await embed_batch(batch)
-        embeddings.extend(batch_embeddings)
+    # Embed in batches — wrapped so a LiteLLM/API failure emits ingest.rejected
+    # rather than dying silently inside asyncio.create_task.
+    try:
+        embeddings: list[list[float]] = []
+        for i in range(0, len(chunks), EMBED_BATCH_SIZE):
+            batch = chunks[i : i + EMBED_BATCH_SIZE]
+            batch_embeddings = await embed_batch(batch)
+            embeddings.extend(batch_embeddings)
+    except Exception as exc:
+        log.error("embedding_failed", source_key=source_key, error=str(exc))
+        await _emit("ingest.rejected", {
+            "event_id": event_id,
+            "conversation_id": conversation_id,
+            "payload": {
+                "source_key": source_key,
+                "reason": "embedding_failed",
+                "detail": str(exc),
+                "file_size": len(raw_bytes),
+                "chat_id": chat_id,
+            },
+        })
+        return
 
-    inserted = await write_chunks(
-        chunks=chunks,
-        embeddings=embeddings,
-        source_key=source_key,
-        content_hashes=hashes,
-    )
+    try:
+        inserted = await write_chunks(
+            chunks=chunks,
+            embeddings=embeddings,
+            source_key=source_key,
+            content_hashes=hashes,
+        )
+    except Exception as exc:
+        log.error("chunk_write_failed", source_key=source_key, error=str(exc))
+        await _emit("ingest.rejected", {
+            "event_id": event_id,
+            "conversation_id": conversation_id,
+            "payload": {
+                "source_key": source_key,
+                "reason": "chunk_write_failed",
+                "detail": str(exc),
+                "file_size": len(raw_bytes),
+                "chat_id": chat_id,
+            },
+        })
+        return
 
     log.info("processing_complete", source_key=source_key, chunks=len(chunks), inserted=inserted)
 

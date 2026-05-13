@@ -36,6 +36,7 @@
     - 03_roles.sql
     - 04_audit_table.sql
     - 05_application_tables.sql
+    - 06_chunks_ingestion_columns.sql
 
 - name: Start Compose stack
   ansible.builtin.command:
@@ -54,12 +55,15 @@
   delay: 5
 
 - name: Create MinIO raw store bucket
+  # minio/minio:latest no longer ships the mc binary — use the minio/mc image instead.
+  # --network container:clive-minio shares the MinIO container's network so
+  # localhost:9000 resolves correctly without exposing the port on the host.
   ansible.builtin.shell: |
-    docker exec clive-minio mc alias set local http://localhost:9000 \
-      "{{ minio_root_user }}" "{{ minio_root_password }}" --quiet
-    docker exec clive-minio mc mb --ignore-existing "local/{{ minio_raw_bucket }}"
+    docker run --rm \
+      --network container:clive-minio \
+      -e MC_HOST_local="http://{{ minio_root_user }}:{{ minio_root_password }}@localhost:9000" \
+      minio/mc mb --ignore-existing "local/{{ minio_raw_bucket }}"
   become: true
   become_user: clive
   register: mc_mb_result
   changed_when: '"Bucket created" in mc_mb_result.stdout'
-  no_log: true

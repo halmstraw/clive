@@ -26,7 +26,10 @@ def extract_text(raw_bytes: bytes, content_type: str, source_key: str) -> str:
 def _extract_pdf(raw_bytes: bytes, source_key: str) -> str:
     from pypdf import PdfReader
 
-    reader = PdfReader(io.BytesIO(raw_bytes))
+    try:
+        reader = PdfReader(io.BytesIO(raw_bytes))
+    except Exception as exc:
+        raise ValueError(f"PDF parsing failed: {source_key}") from exc
     pages = [page.extract_text() or "" for page in reader.pages]
     text = "\n".join(pages).strip()
     log.info("pdf_extracted", source_key=source_key, page_count=len(reader.pages), char_count=len(text))

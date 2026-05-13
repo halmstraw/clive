@@ -122,6 +122,12 @@ jobs:
           python -m pytest tests/ -v
         working-directory: src/telegram
 
+      - name: Run processing service unit tests
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -v
+        working-directory: src/processing
+
   test-db:
     name: Database role privilege tests
     runs-on: ubuntu-latest

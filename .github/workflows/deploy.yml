@@ -48,6 +48,13 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/clive-telegram:${{ steps.meta.outputs.sha }}
 
+      - name: Build and push processing image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/processing
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clive-processing:${{ steps.meta.outputs.sha }}
+
   deploy:
     name: Deploy to production
     runs-on: self-hosted
@@ -82,9 +89,10 @@ jobs:
           ORCHESTRATOR_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           QUERY_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
+          PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
-            up -d --pull always --no-deps orchestrator query telegram
+            up -d --pull always --no-deps orchestrator query telegram processing
 
   verify:
     name: Verify deployment
@@ -101,6 +109,7 @@ jobs:
           ORCHESTRATOR_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           QUERY_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
+          PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml ps --format json \
           | python3 -c '
@@ -115,6 +124,9 @@ jobs:
 
       - name: Verify Block 13 health
         run: docker exec clive-orchestrator curl -sf http://localhost:8080/health
+
+      - name: Verify Block 15 health
+        run: docker exec clive-processing curl -sf http://localhost:8083/health
 
       - name: Trigger rollback on failure
         if: failure()

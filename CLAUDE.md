@@ -93,8 +93,8 @@ Design philosophy: JARVIS (presence, not chatbot) + the Hyperion Principle
 | Infrastructure Agent | 25, 26, 27, 28, 29 | Active |
 | Intelligence Agent | 8, 9, 10, 11, 12 | Active — Block 8 first |
 | Knowledge Agent | 14, 15, 16, 17, 18 | Active — Block 16 first |
-| Access & Security Agent | 6, 7, 23, 24 | Not yet activated |
-| Experience Agent | 1, 2, 3, 4, 5 | Not yet activated |
+| Access & Security Agent | 6, 7, 23, 24 | Active |
+| Experience Agent | 1, 2, 3, 4, 5 | Active |
 | Business Agent | 30–38 | Out of v1 scope |
 
 Agents are defined as subagent files in `.claude/agents/`.
@@ -106,8 +106,8 @@ the alignment constitution.
 
 ## Authoritative Sources — Fetch Before Acting
 
-Implementation specifications live in Notion. Decisions live in the repo.
-Do not treat any local Notion copy as authoritative for decisions.
+Block specifications and implementation specs now live locally in `docs/spec/`. Decisions live in the repo.
+Agent prompts remain in Notion. Do not treat any local Notion copy as authoritative for decisions.
 
 | Artefact | Location | When to load |
 |---|---|---|
@@ -120,15 +120,20 @@ Do not treat any local Notion copy as authoritative for decisions.
 | Intelligence Agent Prompt | https://www.notion.so/3584837a97d381cbb91fe5096e093743 | Intelligence work |
 | Knowledge Agent Prompt | https://www.notion.so/3584837a97d381c6ab74c81f57a936a0 | Knowledge work |
 | Infrastructure files | https://www.notion.so/3584837a97d3818899eaf3af8ec111be | Terraform, Ansible, Compose, SQL, GitHub Actions |
-| Block 13 orchestrator | https://www.notion.so/3584837a97d3818fbc02f885155fd234 | Python orchestrator service |
-| Block 8 query service | https://www.notion.so/3584837a97d3818e8c31cc7dec57fb22 | Python query/RAG service |
-| Block 23 Telegram surface | https://www.notion.so/3584837a97d381adae5bf2a16e77deb2 | Python Telegram bot |
-| Block 13 requirements | https://www.notion.so/3574837a97d3812d82a8c8873fa3bf51 | Full orchestrator requirements |
-| Block 16 requirements | https://www.notion.so/3584837a97d3810dac6eded7ef383068 | Full storage requirements |
-| Block 8 requirements | https://www.notion.so/3584837a97d381a18d71c239ed9dd3d7 | Full query requirements |
-| Block 23 requirements | https://www.notion.so/3584837a97d3818a979ef3e24706bf56 | Full surface requirements |
-| IaC specification | https://www.notion.so/3584837a97d381b0915fd8b5cf71ea54 | Block 27/28 spec |
-| Bootstrap runbook | In infrastructure files artefact | Terraform state setup |
+| Block 13 orchestrator | `docs/spec/Block 13 - Orchestrator Source Code Specification.md` — read locally | Python orchestrator service |
+| Block 8 query service | `docs/spec/Block 8 - Query Service Source Code Specification.md` — read locally | Python query/RAG service |
+| Block 23 Telegram surface | `docs/spec/Block 23 - Telegram Surface Source Code Specification.md` — read locally | Python Telegram bot |
+| Block 13 requirements | `docs/spec/Block 13 - Central Orchestrator Requirements.md` — read locally | Full orchestrator requirements |
+| Block 16 requirements | `docs/spec/Block 16 - Storage Requirements.md` — read locally | Full storage requirements |
+| Block 8 requirements | `docs/spec/Block 8 - Query RAG Requirements.md` — read locally | Full query requirements |
+| Block 23 requirements | `docs/spec/Block 23 - Security Surface Interface Contract.md` — read locally | Full surface requirements |
+| IaC specification | `docs/spec/Block 27-28 - IaC and CICD Specification.md` — read locally | Block 27/28 implementation spec |
+| Block 27 requirements | `docs/spec/Block 27 - Infrastructure IaC Requirements.md` — read locally | Full IaC requirements |
+| Block 21 requirements | `docs/spec/Block 21 - Evolution Engine Requirements.md` — read locally | Full evolution engine requirements |
+| Block 22 alignment rules | `docs/spec/Block 22 - Query-Time Alignment Rules.md` — read locally | Query-time alignment rules loaded by Block 8 |
+| Block 1 personality document | `docs/spec/Block 1 - CLIVE Personality Document v0.1.md` — read locally | Loadable personality document (load into Block 16) |
+| Blocks 14 & 15 requirements | `docs/spec/Block 14-15 - Ingestion and Processing Requirements.md` — read locally | Ingestion & processing pipeline requirements |
+| Bootstrap runbook | `docs/runbooks/terraform-bootstrap.md` — read locally | Terraform state setup |
 
 ---
 

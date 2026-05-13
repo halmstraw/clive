@@ -1,0 +1,113 @@
+# CLIVE — Decision Index
+
+Source of truth: this file and docs/decisions/
+Git history is the audit trail.
+Notion is a read-only view — do not edit decisions in Notion.
+
+Last decision ID: D-102
+Last updated: 2026-05-13
+
+| ID | Title | Status | Date | Blocks | File |
+|----|-------|--------|------|--------|------|
+| D-001 | CLIVE is a single-owner system | Accepted | 2026-05-01 | System-wide | [D-001-single-owner-system.md](docs/decisions/D-001-single-owner-system.md) |
+| D-002 | No technology choices at specification stage | Accepted | 2026-05-01 | System-wide | [D-002-no-technology-at-spec.md](docs/decisions/D-002-no-technology-at-spec.md) |
+| D-003 | Event bus principle — all inter-block communication via Block 13 | Accepted | 2026-05-01 | Block 13, all blocks | [D-003-event-bus-principle.md](docs/decisions/D-003-event-bus-principle.md) |
+| D-004 | Alignment Layer governs the goal function; Evolution Engine may not modify ends | Accepted | 2026-05-01 | Block 22, Block 21 | [D-004-alignment-layer-governs.md](docs/decisions/D-004-alignment-layer-governs.md) |
+| D-005 | Personality (Block 1) survives the Reaper; not subject to evolutionary deprecation | Accepted | 2026-05-01 | Block 1, Block 21 | [D-005-personality-survives-reaper.md](docs/decisions/D-005-personality-survives-reaper.md) |
+| D-006 | Every destructive or irreversible action requires explicit human confirmation | Accepted | 2026-05-01 | Block 9, all blocks | [D-006-confirmation-gate.md](docs/decisions/D-006-confirmation-gate.md) |
+| D-007 | CLIVE has no fixed business model at initialisation | Accepted | 2026-05-01 | Block 21, Blocks 30–38 | [D-007-no-fixed-business-model.md](docs/decisions/D-007-no-fixed-business-model.md) |
+| D-008 | DECISIONS.md is a living document; every significant decision recorded before implementation | Accepted | 2026-05-01 | Block 29 | [D-008-decisions-living-document.md](docs/decisions/D-008-decisions-living-document.md) |
+| D-009 | Build team follows Model A — parallel specialists coordinated by owner and Architect | Accepted | 2026-05-01 | System-wide | [D-009-build-model-a.md](docs/decisions/D-009-build-model-a.md) |
+| D-010 | All agents use the standard decision protocol when approaching the owner | Accepted | 2026-05-01 | System-wide | [D-010-standard-decision-protocol.md](docs/decisions/D-010-standard-decision-protocol.md) |
+| D-011 | One ask per message; multiple questions submitted separately in priority order | Accepted | 2026-05-01 | System-wide | [D-011-one-ask-per-message.md](docs/decisions/D-011-one-ask-per-message.md) |
+| D-012 | Architect co-owns Block 22; Systems Agent owns Blocks 13 19 20 21 only | Accepted | 2026-05-01 | Block 22, Block 13 | [D-012-architect-owns-block-22.md](docs/decisions/D-012-architect-owns-block-22.md) |
+| D-013 | New specialists activated on Architect recommendation, approved by owner | Accepted | 2026-05-01 | System-wide | [D-013-specialist-activation.md](docs/decisions/D-013-specialist-activation.md) |
+| D-014 | Transient Bootstrap Agent produces Architect prompt and specialist template then is retired | Accepted | 2026-05-01 | System-wide | [D-014-bootstrap-agent.md](docs/decisions/D-014-bootstrap-agent.md) |
+| D-015 | Specialist agent team grows incrementally as the build requires | Accepted | 2026-05-01 | System-wide | [D-015-incremental-specialist-growth.md](docs/decisions/D-015-incremental-specialist-growth.md) |
+| D-016 | Build process is parallel; specialist agents run concurrently | Accepted | 2026-05-01 | System-wide | [D-016-parallel-build.md](docs/decisions/D-016-parallel-build.md) |
+| D-017 | Block 13 and Block 16 are built first; not deferred | Accepted | 2026-05-01 | Block 13, Block 16 | [D-017-block-13-16-first.md](docs/decisions/D-017-block-13-16-first.md) |
+| D-018 | Agents are stateless API calls; all state lives in central store | Accepted | 2026-05-01 | System-wide | [D-018-agents-stateless.md](docs/decisions/D-018-agents-stateless.md) |
+| D-019 | Systems Agent and Infrastructure Agent activated first | Accepted | 2026-05-01 | Block 13, Block 27 | [D-019-systems-infra-first.md](docs/decisions/D-019-systems-infra-first.md) |
+| D-020 | All Architect-generated system prompts delivered as a single copyable code block | Accepted | 2026-05-01 | Block 29 | [D-020-prompts-single-code-block.md](docs/decisions/D-020-prompts-single-code-block.md) |
+| D-021 | Implementation does not begin until Block 13 and Block 27 requirements are approved | Accepted | 2026-05-01 | Block 13, Block 27 | [D-021-implementation-after-requirements.md](docs/decisions/D-021-implementation-after-requirements.md) |
+| D-022 | Experimental zone runs on entirely separate infrastructure from production | Accepted | 2026-05-01 | Block 21, Block 24 | [D-022-experimental-zone-isolation.md](docs/decisions/D-022-experimental-zone-isolation.md) |
+| D-023 | Central Orchestrator runs as single instance with no redundancy in v1 | Accepted | 2026-05-01 | Block 13, Block 27 | [D-023-single-orchestrator-instance.md](docs/decisions/D-023-single-orchestrator-instance.md) |
+| D-024 | Cross-environment communication via controlled event bridge only; fully logged | Accepted | 2026-05-01 | Block 13, Block 21 | [D-024-controlled-event-bridge.md](docs/decisions/D-024-controlled-event-bridge.md) |
+| D-025 | Block 13 provides at-least-once event delivery; all subscribers must be idempotent | Accepted | 2026-05-01 | Block 13, Block 9, Block 16 | [D-025-at-least-once-delivery.md](docs/decisions/D-025-at-least-once-delivery.md) |
+| D-026 | Block 13 guarantees per-conversation event ordering only; not global | Accepted | 2026-05-01 | Block 13, Block 9 | [D-026-per-conversation-ordering.md](docs/decisions/D-026-per-conversation-ordering.md) |
+| D-027 | v1 disaster recovery is point-in-time; recovery time may be hours | Accepted | 2026-05-01 | Block 16, Block 27 | [D-027-point-in-time-recovery.md](docs/decisions/D-027-point-in-time-recovery.md) |
+| D-028 | Queue overflow rejects new events at source; owner notified; no silent drops | Accepted | 2026-05-01 | Block 13, Block 4 | [D-028-queue-overflow-backpressure.md](docs/decisions/D-028-queue-overflow-backpressure.md) |
+| D-029 | Block 21 provisions experimental environments using parameterised IaC templates only | Accepted | 2026-05-01 | Block 21, Block 24 | [D-029-block-21-parameterised-iac.md](docs/decisions/D-029-block-21-parameterised-iac.md) |
+| D-030 | Experimental zone events are a distinct trust class; enhanced alignment gate applies | Accepted | 2026-05-01 | Block 22, Block 13 | [D-030-experimental-events-trust-class.md](docs/decisions/D-030-experimental-events-trust-class.md) |
+| D-031 | Block 13 retries with exponential backoff; dead-letter on exhaustion | Accepted | 2026-05-01 | Block 13, Block 25 | [D-031-retry-exponential-backoff.md](docs/decisions/D-031-retry-exponential-backoff.md) |
+| D-032 | Block 25 is production-scoped only; evolution history crosses bridge as events | Accepted | 2026-05-01 | Block 25, Block 21 | [D-032-block-25-production-scoped.md](docs/decisions/D-032-block-25-production-scoped.md) |
+| D-033 | DECISIONS.md replaced by Notion pointer file; Notion is source of truth | Superseded by D-102 | 2026-05-01 | Block 29 | [D-033-decisions-notion-source-of-truth.md](docs/decisions/D-033-decisions-notion-source-of-truth.md) |
+| D-034 | Every variant promotion from experimental requires explicit owner sign-off | Accepted | 2026-05-01 | Block 21, Block 9 | [D-034-owner-sign-off-per-promotion.md](docs/decisions/D-034-owner-sign-off-per-promotion.md) |
+| D-035 | CLIVE v0.1 is single-surface query-only; zero actions workers or evolution | Accepted | 2026-05-01 | Block 1, Block 8, Block 13 | [D-035-v01-query-only-single-surface.md](docs/decisions/D-035-v01-query-only-single-surface.md) |
+| D-036 | Business Layer (Blocks 30–38) out of v1 scope; gated behind named preconditions | Accepted | 2026-05-01 | Blocks 30–38 | [D-036-business-layer-out-of-v1.md](docs/decisions/D-036-business-layer-out-of-v1.md) |
+| D-037 | Block 22 alignment gate is deterministic rules-and-schema; no LLM-as-judge in v1 | Accepted | 2026-05-01 | Block 22, Block 13 | [D-037-alignment-gate-rules-schema.md](docs/decisions/D-037-alignment-gate-rules-schema.md) |
+| D-038 | D-034 relaxation requires explicit superseding decision reviewing full history | Accepted | 2026-05-01 | Block 21, Block 22 | [D-038-d034-relaxation-locked.md](docs/decisions/D-038-d034-relaxation-locked.md) |
+| D-039 | Personality encoded as versioned constitutional document plus system prompt content | Accepted | 2026-05-01 | Block 1, Block 21 | [D-039-personality-document-encoding.md](docs/decisions/D-039-personality-document-encoding.md) |
+| D-040 | Build-phase agents and runtime workers are explicitly distinct models | Accepted | 2026-05-01 | Block 10, Block 13, Block 17 | [D-040-build-vs-runtime-agents.md](docs/decisions/D-040-build-vs-runtime-agents.md) |
+| D-041 | CLIVE repo uses RepoRails for AI-optimised repository structure | Accepted | 2026-05-01 | Block 28, Block 29 | [D-041-reporails-repo-structure.md](docs/decisions/D-041-reporails-repo-structure.md) |
+| D-042 | Intelligence Agent and Knowledge Agent activated; Block 21 paused | Accepted | 2026-05-01 | Block 8, Block 16, Block 21 | [D-042-intelligence-knowledge-activated.md](docs/decisions/D-042-intelligence-knowledge-activated.md) |
+| D-043 | Block 8 retrieval from Block 16 is orchestrator-mediated; not a full event round-trip | Accepted | 2026-05-01 | Block 8, Block 13, Block 16 | [D-043-block8-orchestrator-mediated-retrieval.md](docs/decisions/D-043-block8-orchestrator-mediated-retrieval.md) |
+| D-044 | Block 8 context assembly uses dynamic allocation with priority ordering | Accepted | 2026-05-01 | Block 8, Block 12 | [D-044-block8-dynamic-context-allocation.md](docs/decisions/D-044-block8-dynamic-context-allocation.md) |
+| D-045 | Block 8 acknowledges unavailable action intent and emits structured event | Accepted | 2026-05-01 | Block 8, Block 13, Block 25 | [D-045-block8-action-intent-handling.md](docs/decisions/D-045-block8-action-intent-handling.md) |
+| D-046 | Block 8 caches response by event ID per conversation; returns cached on duplicate | Accepted | 2026-05-01 | Block 8, Block 13 | [D-046-block8-duplicate-query-cache.md](docs/decisions/D-046-block8-duplicate-query-cache.md) |
+| D-047 | Block 8 confidence signal is retrieval quality only; no LLM self-assessment | Accepted | 2026-05-01 | Block 8, Block 25 | [D-047-block8-confidence-signal.md](docs/decisions/D-047-block8-confidence-signal.md) |
+| D-048 | Block 1 is a document stored in Block 16 at runtime; not a runtime service | Accepted | 2026-05-01 | Block 1, Block 8, Block 16 | [D-048-block1-document-not-service.md](docs/decisions/D-048-block1-document-not-service.md) |
+| D-049 | System document activation requires explicit two-step owner confirmation | Accepted | 2026-05-01 | Block 16, Block 22, Block 1 | [D-049-system-document-activation.md](docs/decisions/D-049-system-document-activation.md) |
+| D-050 | Block 16 uses single zone "personal" at v0.1; zone enforcement active from day one | Accepted | 2026-05-01 | Block 16, Block 7, Block 13 | [D-050-block16-single-zone.md](docs/decisions/D-050-block16-single-zone.md) |
+| D-051 | CLIVE's relational stance is trusted advisor; direct to point of bluntness | Accepted | 2026-05-01 | Block 1, Block 8, Block 22 | [D-051-trusted-advisor-stance.md](docs/decisions/D-051-trusted-advisor-stance.md) |
+| D-052 | CLIVE volunteers assessment unprompted on high-stakes matters; silent otherwise | Accepted | 2026-05-01 | Block 1, Block 8 | [D-052-proactive-assessment-threshold.md](docs/decisions/D-052-proactive-assessment-threshold.md) |
+| D-053 | CLIVE's register is adaptive with a bias toward concise | Accepted | 2026-05-01 | Block 1, Block 8 | [D-053-adaptive-register.md](docs/decisions/D-053-adaptive-register.md) |
+| D-054 | Personality document uses named sections written as prose instructions | Accepted | 2026-05-01 | Block 1, Block 16, Block 8 | [D-054-personality-document-structure.md](docs/decisions/D-054-personality-document-structure.md) |
+| D-055 | Block 13 retry parameters — 5 retries, 2s initial backoff, x2 multiplier | Accepted | 2026-05-01 | Block 13, Block 25 | [D-055-block13-retry-parameters.md](docs/decisions/D-055-block13-retry-parameters.md) |
+| D-056 | Maximum data loss window is 24 hours; nightly snapshot backup only | Accepted | 2026-05-01 | Block 16, Block 27 | [D-056-24hr-data-loss-window.md](docs/decisions/D-056-24hr-data-loss-window.md) |
+| D-057 | Block 23 authentication at v0.1 is channel-as-authentication; no additional credential layer | Accepted | 2026-05-01 | Block 23, Block 6, Block 7 | [D-057-channel-as-authentication.md](docs/decisions/D-057-channel-as-authentication.md) |
+| D-058 | Block 4 owns inbound authentication boundary and attaches surface auth metadata | Accepted | 2026-05-01 | Block 4, Block 23 | [D-058-block4-authentication-boundary.md](docs/decisions/D-058-block4-authentication-boundary.md) |
+| D-059 | Alert payload schema between Block 25 and Block 4 is jointly-owned interface contract | Accepted | 2026-05-01 | Block 25, Block 4 | [D-059-alert-schema-jointly-owned.md](docs/decisions/D-059-alert-schema-jointly-owned.md) |
+| D-060 | Architect authors Block 22 alignment gate ruleset; Systems Agent implements only | Accepted | 2026-05-01 | Block 22, Block 13, Block 29 | [D-060-architect-authors-alignment-rules.md](docs/decisions/D-060-architect-authors-alignment-rules.md) |
+| D-061 | v0.1 surface is Telegram | Accepted | 2026-05-01 | Block 23, Block 4 | [D-061-v01-surface-telegram.md](docs/decisions/D-061-v01-surface-telegram.md) |
+| D-062 | Block 13 event bus is in-process pub/sub; no external broker | Accepted | 2026-05-01 | Block 13, Block 27 | [D-062-in-process-event-bus.md](docs/decisions/D-062-in-process-event-bus.md) |
+| D-063 | Block 13 runs as long-running containerised service; starts at boot | Accepted | 2026-05-01 | Block 13, Block 27 | [D-063-block13-long-running-container.md](docs/decisions/D-063-block13-long-running-container.md) |
+| D-064 | CLIVE v0.1 runs on a single cloud VM | Accepted | 2026-05-01 | Block 27, Block 13, Block 28 | [D-064-single-cloud-vm.md](docs/decisions/D-064-single-cloud-vm.md) |
+| D-065 | Block 16 search index uses PostgreSQL with pgvector extension | Accepted | 2026-05-01 | Block 16, Block 8, Block 13 | [D-065-postgresql-pgvector.md](docs/decisions/D-065-postgresql-pgvector.md) |
+| D-066 | Block 16 relational/state store shares the PostgreSQL instance with search index | Accepted | 2026-05-01 | Block 16, Block 13, Block 27 | [D-066-single-postgresql-instance.md](docs/decisions/D-066-single-postgresql-instance.md) |
+| D-067 | Block 16 audit log is append-only table with INSERT-only database role | Accepted | 2026-05-01 | Block 16, Block 13, Block 27 | [D-067-append-only-audit-log.md](docs/decisions/D-067-append-only-audit-log.md) |
+| D-068 | Block 16 raw store uses S3-compatible object storage | Accepted | 2026-05-01 | Block 16, Block 14, Block 27 | [D-068-s3-raw-store.md](docs/decisions/D-068-s3-raw-store.md) |
+| D-069 | Infrastructure Agent must include separate backup for S3 raw store in IaC design | Accepted | 2026-05-01 | Block 27, Block 16 | [D-069-object-store-backup.md](docs/decisions/D-069-object-store-backup.md) |
+| D-070 | CLIVE v0.1 hosted on Hetzner | Accepted | 2026-05-01 | Block 27, Block 28 | [D-070-hetzner.md](docs/decisions/D-070-hetzner.md) |
+| D-071 | Block 27 uses Terraform as IaC provisioning tool with Hetzner provider | Accepted | 2026-05-01 | Block 27, Block 28 | [D-071-terraform.md](docs/decisions/D-071-terraform.md) |
+| D-072 | Container management uses Docker Compose and Ansible; Terraform provisions VM | Accepted | 2026-05-01 | Block 27, Block 28 | [D-072-compose-ansible.md](docs/decisions/D-072-compose-ansible.md) |
+| D-073 | Architect holds placeholder alert payload schema pending Experience Agent review | Accepted | 2026-05-01 | Block 25, Block 4, Block 29 | [D-073-alert-schema-placeholder.md](docs/decisions/D-073-alert-schema-placeholder.md) |
+| D-074 | CLIVE v0.1 has no staging environment; CI deploys direct to production | Accepted | 2026-05-01 | Block 28, Block 27 | [D-074-no-staging-environment.md](docs/decisions/D-074-no-staging-environment.md) |
+| D-075 | GitHub Actions is the CI/CD pipeline tool for Block 28 | Accepted | 2026-05-01 | Block 28, Block 27 | [D-075-github-actions.md](docs/decisions/D-075-github-actions.md) |
+| D-076 | Terraform state bucket bootstrap is manual one-time step; must be in runbook | Accepted | 2026-05-01 | Block 27, Block 29 | [D-076-terraform-bootstrap-runbook.md](docs/decisions/D-076-terraform-bootstrap-runbook.md) |
+| D-077 | Block 8 calls LLMs via LiteLLM; default provider Anthropic; no provider hardcoded | Accepted | 2026-05-01 | Block 8, Block 21, Block 27 | [D-077-litellm-abstraction.md](docs/decisions/D-077-litellm-abstraction.md) |
+| D-078 | D-073 placeholder alert schema adopted as confirmed jointly-owned contract | Accepted | 2026-05-01 | Block 4, Block 25, Block 29 | [D-078-alert-schema-confirmed.md](docs/decisions/D-078-alert-schema-confirmed.md) |
+| D-079 | v0.1 system document activation is two-step — submit then confirm | Accepted | 2026-05-01 | Block 16, Block 22, Block 1 | [D-079-system-document-two-step-activation.md](docs/decisions/D-079-system-document-two-step-activation.md) |
+| D-080 | Six acceptance criteria define when CLIVE v0.1 is shippable | Accepted | 2026-05-01 | All blocks | [D-080-v01-acceptance-criteria.md](docs/decisions/D-080-v01-acceptance-criteria.md) |
+| D-081 | Architect team status table removed from system prompt; lives in Notion task list | Accepted | 2026-05-01 | Block 29 | [D-081-architect-prompt-team-status.md](docs/decisions/D-081-architect-prompt-team-status.md) |
+| D-082 | D-078 attribution to Experience Agent corrected — agent was not in session | Accepted | 2026-05-01 | Block 4, Block 25, Block 29 | [D-082-d078-attribution-correction.md](docs/decisions/D-082-d078-attribution-correction.md) |
+| D-083 | CLIVE infrastructure accounts registered under cliveai@proton.me | Accepted | 2026-05-01 | Block 27, Block 28, Block 23 | [D-083-cliveai-proton-email.md](docs/decisions/D-083-cliveai-proton-email.md) |
+| D-084 | CI pipeline creates stub secrets file from .env.example; never committed | Accepted | 2026-05-01 | Block 28, Block 27 | [D-084-ci-secrets-stub.md](docs/decisions/D-084-ci-secrets-stub.md) |
+| D-085 | Two spec errors corrected during v0.1 scaffold review; recorded for audit | Accepted | 2026-05-01 | Block 8 | [D-085-spec-error-corrections.md](docs/decisions/D-085-spec-error-corrections.md) |
+| D-086 | Terraform state locking not implemented; Hetzner limitation accepted | Accepted | 2026-05-01 | Block 27, Block 28 | [D-086-no-terraform-state-locking.md](docs/decisions/D-086-no-terraform-state-locking.md) |
+| D-087 | Three Terraform configuration corrections during bootstrap; recorded for audit | Accepted | 2026-05-01 | Block 27 | [D-087-terraform-config-corrections.md](docs/decisions/D-087-terraform-config-corrections.md) |
+| D-088 | Docker Compose stack deployment added as Ansible role; no manual step | Accepted | 2026-05-01 | Block 27, Block 28 | [D-088-ansible-compose-deployment.md](docs/decisions/D-088-ansible-compose-deployment.md) |
+| D-089 | Dedicated Hetzner Object Storage access key for backup; isolated from app credentials | Accepted | 2026-05-01 | Block 27, Block 16 | [D-089-backup-credential-isolation.md](docs/decisions/D-089-backup-credential-isolation.md) |
+| D-090 | CI/CD deploys via self-hosted GitHub Actions runner on VM; no inbound SSH | Accepted | 2026-05-01 | Block 23, Block 27, Block 28 | [D-090-self-hosted-runner.md](docs/decisions/D-090-self-hosted-runner.md) |
+| D-091 | Terraform CI plan auto; apply manual only | Accepted | 2026-05-01 | Block 27, Block 28 | [D-091-terraform-ci-manual-apply.md](docs/decisions/D-091-terraform-ci-manual-apply.md) |
+| D-092 | rollback.yml updated to use self-hosted runner | Accepted | 2026-05-01 | Block 28 | [D-092-rollback-self-hosted-runner.md](docs/decisions/D-092-rollback-self-hosted-runner.md) |
+| D-093 | Database role passwords injected via Ansible ALTER ROLE; SQL files clean | Accepted | 2026-05-01 | Block 27, Block 16 | [D-093-db-passwords-ansible-alter-role.md](docs/decisions/D-093-db-passwords-ansible-alter-role.md) |
+| D-094 | CLIVE v0.1 signed off; all six criteria met 09 May 2026 | Accepted | 2026-05-09 | All blocks | [D-094-v01-signed-off.md](docs/decisions/D-094-v01-signed-off.md) |
+| D-095 | CI integration tests use containerised PostgreSQL; production never tested against | Accepted | 2026-05-01 | Block 28, Block 16 | [D-095-ci-containerised-postgres.md](docs/decisions/D-095-ci-containerised-postgres.md) |
+| D-096 | Block 15 uses OpenAI text-embedding-3-small via LiteLLM; 1536 dimensions | Accepted | 2026-05-01 | Block 15, Block 16, Block 8 | [D-096-embedding-model-openai-small.md](docs/decisions/D-096-embedding-model-openai-small.md) |
+| D-097 | Fixed-size chunking 512 tokens; 50-token overlap; 50-token minimum | Accepted | 2026-05-01 | Block 15 | [D-097-fixed-size-chunking.md](docs/decisions/D-097-fixed-size-chunking.md) |
+| D-098 | Maximum ingest file size 10 MB; oversized files rejected with ingest.rejected event | Accepted | 2026-05-01 | Block 14, Block 15 | [D-098-max-ingest-file-size-10mb.md](docs/decisions/D-098-max-ingest-file-size-10mb.md) |
+| D-099 | CLIVE v0.2 scope approved | Accepted | 2026-05-09 | All blocks | [D-099-v02-scope-approved.md](docs/decisions/D-099-v02-scope-approved.md) |
+| D-100 | Block 18 (Feedback/Correction) deferred to v0.3 | Accepted | 2026-05-09 | Block 18 | [D-100-block18-deferred-v03.md](docs/decisions/D-100-block18-deferred-v03.md) |
+| D-101 | Telegram /ingest uses caption command pattern | Accepted | 2026-05-09 | Block 23, Block 14 | [D-101-telegram-ingest-caption-command.md](docs/decisions/D-101-telegram-ingest-caption-command.md) |
+| D-102 | Decisions migrated from Notion to local ADR files | Accepted | 2026-05-13 | Block 29 | [D-102-decisions-to-local-adr-files.md](docs/decisions/D-102-decisions-to-local-adr-files.md) |

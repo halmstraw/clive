@@ -106,12 +106,12 @@ the alignment constitution.
 
 ## Authoritative Sources — Fetch Before Acting
 
-All implementation specifications and decisions live in Notion.
-Do not treat any local copy as authoritative.
+Implementation specifications live in Notion. Decisions live in the repo.
+Do not treat any local Notion copy as authoritative for decisions.
 
-| Artefact | Notion URL | When to fetch |
+| Artefact | Location | When to load |
 |---|---|---|
-| DECISIONS.md | https://www.notion.so/3574837a97d381568100cd1370c68264 | Every session start |
+| DECISIONS.md | `DECISIONS.md` (repo root) — read locally | Every session start |
 | Agent Prompts Index | https://www.notion.so/3584837a97d38119b056f70c58da5e62 | When activating a specialist |
 | Architect Prompt | https://www.notion.so/3584837a97d38172a609ecbcae152ac4 | Architect sessions |
 | Systems Agent Prompt | https://www.notion.so/3584837a97d3812bb22fc98048103b6c | Systems work |
@@ -211,10 +211,11 @@ If you have more than one ask, submit the highest-priority one and wait.
 
 ## Decisions Log
 
-All architectural decisions are in DECISIONS.md, maintained live in Notion:
-https://www.notion.so/3574837a97d381568100cd1370c68264
+All architectural decisions are in DECISIONS.md at the repo root.
+Full ADR files are in docs/decisions/. Git history is the audit trail.
+Notion is a read-only view — do not edit decisions in Notion.
 
-Highest decision ID at time of writing: D-101.
+Highest decision ID at time of writing: D-102.
 
 If implementation reveals a gap or conflict not covered by existing
 decisions, stop and flag it. Do not resolve design questions in code.
@@ -282,10 +283,10 @@ Skills live in `.claude/skills/` and are auto-discovered by Claude Code.
 Claude reads every skill description and loads the skill when a task matches.
 You do not invoke them manually unless you want to — they load automatically.
 
-**fetch-decisions** — Standardises the Notion fetch at session start.
+**fetch-decisions** — Reads DECISIONS.md from the repo root at session start.
 Loads automatically when sessions begin or when decisions need verifying.
-Ensures every agent follows the same fetch-confirm-flag-proceed sequence.
-If Notion is unreachable, this skill stops the session and waits.
+Ensures every agent follows the same read-confirm-flag-proceed sequence.
+If DECISIONS.md is missing, this skill stops the session and waits.
 
 **record-decision** — Enforces the decision protocol format for every ask
 to the owner. Loads automatically when an agent raises a decision, direction,
@@ -309,13 +310,13 @@ for requirements work verifiable.
 
 Every session, before acting on any instruction:
 
-- [ ] Fetch DECISIONS.md from Notion and confirm highest decision ID
+- [ ] Read DECISIONS.md from the repo root and confirm highest decision ID
 - [ ] State which blocks or work are in focus for this session
 - [ ] Flag any DECISIONS.md entries marked "Under Review" relevant to this session
 - [ ] Confirm which agents are active and which are not yet activated
 - [ ] Proceed
 
-If Notion is unreachable, stop and report. Do not proceed with stale decisions.
+If DECISIONS.md is missing or unreadable, stop and report. Do not proceed.
 
 ---
 

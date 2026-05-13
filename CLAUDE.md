@@ -112,6 +112,7 @@ Do not treat any local Notion copy as authoritative for decisions.
 | Artefact | Location | When to load |
 |---|---|---|
 | DECISIONS.md | `DECISIONS.md` (repo root) — read locally | Every session start |
+| CLIVE v0.1 specification | `docs/spec/clive-v0.1.md` — read locally | When working on any block |
 | Agent Prompts Index | https://www.notion.so/3584837a97d38119b056f70c58da5e62 | When activating a specialist |
 | Architect Prompt | https://www.notion.so/3584837a97d38172a609ecbcae152ac4 | Architect sessions |
 | Systems Agent Prompt | https://www.notion.so/3584837a97d3812bb22fc98048103b6c | Systems work |

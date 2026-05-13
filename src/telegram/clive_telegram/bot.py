@@ -394,6 +394,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "source_key": document.file_name or "unknown",
                     "reason": "file_too_large",
                     "file_size": document.file_size,
+                    "chat_id": chat_id,                  # D-103 criterion 6 provenance
                 },
             },
         )
@@ -441,6 +442,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "original_filename": original_name,
                 "file_size": document.file_size,
                 "content_type": content_type,
+                "chat_id": chat_id,                      # D-103 criterion 6 provenance
             },
         },
     )

@@ -72,6 +72,7 @@ class TestProcessHappyPath:
         assert posted["payload"]["source_key"] == "notes.txt"
         assert "chunk_count" in posted["payload"]
         assert "inserted_count" in posted["payload"]
+        assert "file_size" in posted["payload"]          # D-103 criterion 6 provenance
 
 
 class TestProcessRejection:

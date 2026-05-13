@@ -77,6 +77,7 @@ async def process(event_payload: dict[str, Any]) -> None:
     source_key = event_payload["source_key"]
     content_type = event_payload.get("content_type", "text/plain")
     conversation_id = event_payload.get("conversation_id")
+    chat_id = event_payload.get("chat_id")          # D-103 criterion 6 provenance
     event_id = str(uuid.uuid4())
 
     log.info("processing_start", source_key=source_key)
@@ -98,7 +99,11 @@ async def process(event_payload: dict[str, Any]) -> None:
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
-            "payload": {"source_key": source_key, "reason": "file_too_large"},
+            "payload": {
+                "source_key": source_key,
+                "reason": "file_too_large",
+                "file_size": len(raw_bytes),             # D-103 criterion 6 provenance
+            },
         })
         return
 
@@ -147,5 +152,7 @@ async def process(event_payload: dict[str, Any]) -> None:
             "source_key": source_key,
             "chunk_count": len(chunks),
             "inserted_count": inserted,
+            "file_size": len(raw_bytes),                 # D-103 criterion 6 provenance
+            "chat_id": chat_id,                          # D-103 criterion 6 provenance
         },
     })

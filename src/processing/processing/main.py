@@ -27,7 +27,7 @@ async def handle_ingest(request: web.Request) -> web.Response:
     data = await request.json()
     payload = data.get("payload", {})
     # Merge top-level fields that pipeline expects (source_key may be at top level)
-    for key in ("source_key", "content_type", "conversation_id", "original_filename", "file_size"):
+    for key in ("source_key", "content_type", "conversation_id", "original_filename", "file_size", "chat_id"):
         if key in data and key not in payload:
             payload[key] = data[key]
     asyncio.create_task(process(payload))

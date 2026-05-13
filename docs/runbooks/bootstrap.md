@@ -1,30 +1,21 @@
 # CLIVE Bootstrap Runbook
 
-Use this when standing CLIVE up from scratch on a freshly provisioned VM.
-Prerequisites: Terraform applied, VM reachable via SSH, repo cloned locally.
+Use this when standing CLIVE up from scratch. Follow in order:
+`docs/runbooks/terraform-bootstrap.md` first, then this runbook.
+
+This runbook picks up after `terraform apply` has completed and the VM is reachable via SSH.
 
 ---
 
-## 1. Terraform state bucket
+## 1. Terraform state bucket and first apply
 
-Hetzner Object Storage does not support state locking (D-086 — known constraint, accepted for single-operator use).
+Complete `docs/runbooks/terraform-bootstrap.md` before continuing here. That document covers:
+- Creating the `clive-terraform-state` Hetzner Object Storage bucket
+- Configuring credentials via `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+- Running `terraform init` and `terraform apply`
+- Populating GitHub Actions secrets
 
-1. In the Hetzner console, create an Object Storage bucket named `clive-terraform-state`.
-2. Create an access key scoped to that bucket. Save the key ID and secret.
-3. Set values in `infrastructure/terraform/terraform.tfvars`:
-   ```
-   state_bucket_name       = "clive-terraform-state"
-   state_access_key        = "<key id>"
-   state_secret_key        = "<secret>"
-   ```
-4. Initialise the backend:
-   ```
-   cd infrastructure/terraform
-   terraform init
-   ```
-5. Confirm: Terraform prints `Successfully configured the backend "s3"`.
-
-> **Known constraint (D-086):** Hetzner Object Storage has no lock API. Concurrent `terraform apply` runs are unsafe. Only one operator should apply at a time.
+Once `terraform apply` has completed and you have the VM IP, continue with step 2.
 
 ---
 

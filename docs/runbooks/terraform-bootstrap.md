@@ -56,15 +56,19 @@ terraform init
 
 Expected output includes: `Successfully configured the backend "s3"!`
 
-### 5. Verify state locking
+### 5. Verify backend connectivity
 
 ```
 terraform plan
 ```
 
-If state locking is working, you will see: `Acquiring state lock.`
-If the bucket does not exist or credentials are wrong, Terraform will error
-before making any changes.
+Confirm: Terraform outputs a plan without error. If the bucket does not exist
+or credentials are wrong, Terraform will error at the backend initialisation
+step before making any changes.
+
+> **Note (D-086):** Hetzner Object Storage has no state locking API. You will
+> not see `Acquiring state lock.` — this is expected and accepted for a
+> single-operator deployment.
 
 ### 6. Add secrets to GitHub Actions
 
@@ -106,6 +110,6 @@ If the state bucket is lost:
 - [ ] `clive-terraform-state` bucket exists in Hetzner Object Storage
 - [ ] AWS credentials for bucket access are saved securely
 - [ ] `terraform init` completes without error
-- [ ] `terraform plan` shows state lock acquired
+- [ ] `terraform plan` completes without error (no state lock expected — D-086)
 - [ ] All GitHub Actions secrets populated
 - [ ] First `terraform apply` completes and VM IP is recorded

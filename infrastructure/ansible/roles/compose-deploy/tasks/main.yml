@@ -53,11 +53,12 @@
   retries: 12
   delay: 5
 
-- name: Create {{ minio_raw_bucket }} bucket in MinIO
+- name: Create MinIO raw store bucket
   ansible.builtin.shell: |
     docker exec clive-minio mc alias set local http://localhost:9000 \
       "{{ minio_root_user }}" "{{ minio_root_password }}" --quiet
     docker exec clive-minio mc mb --ignore-existing "local/{{ minio_raw_bucket }}"
+  become: true
   become_user: clive
   register: mc_mb_result
   changed_when: '"Bucket created" in mc_mb_result.stdout'

@@ -1,0 +1,49 @@
+name: Ansible
+
+# Manual trigger only — use this to apply vault secret changes to the server.
+# This workflow is never triggered automatically. It runs the full Ansible
+# playbook against production: re-writes /etc/clive/secrets.env from the vault,
+# re-creates the MinIO bucket (idempotent), and applies any role changes.
+on:
+  workflow_dispatch:
+
+jobs:
+  ansible:
+    name: Run Ansible playbook
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: |
+          pip install ansible ansible-lint
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
+
+      - name: Write SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CLIVE_SSH_PRIVATE_KEY }}" > ~/.ssh/clive_vm_ed25519
+          chmod 600 ~/.ssh/clive_vm_ed25519
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H 138.199.149.201 >> ~/.ssh/known_hosts
+
+      - name: Write vault password file
+        run: |
+          echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault_pass
+          chmod 600 /tmp/vault_pass
+
+      - name: Run Ansible playbook
+        run: |
+          ansible-playbook \
+            -i infrastructure/ansible/inventory \
+            infrastructure/ansible/playbook.yml \
+            --vault-password-file /tmp/vault_pass
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+
+      - name: Clean up secrets
+        if: always()
+        run: |
+          rm -f ~/.ssh/clive_vm_ed25519 /tmp/vault_pass

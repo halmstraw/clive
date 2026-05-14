@@ -92,6 +92,8 @@ async def execute_deletion(payload: dict[str, Any], orchestrator_url: str) -> No
       action_type        — should be "document.delete"
       chat_id            — for surface routing
       conversation_id    — for Block 13 routing
+      suppress_telegram  — if True, propagated to result events so Block 23
+                           skips the Telegram send (used by E2E test suite)
 
     Matching strategy (D-109): source_key format is {uuid}/{original_filename}.
     We match WHERE source_key LIKE '%/' || filename.
@@ -102,6 +104,7 @@ async def execute_deletion(payload: dict[str, Any], orchestrator_url: str) -> No
     filename = payload.get("action_target", "")
     chat_id = payload.get("chat_id")
     conversation_id = payload.get("conversation_id")
+    suppress_telegram = bool(payload.get("suppress_telegram", False))
 
     log.info(
         "deletion_pipeline_start",
@@ -142,6 +145,7 @@ async def execute_deletion(payload: dict[str, Any], orchestrator_url: str) -> No
                         "action_request_id": action_request_id,
                         "filename": filename,
                         "chat_id": chat_id,
+                        "suppress_telegram": suppress_telegram,
                     },
                 },
                 timeout=10.0,
@@ -208,6 +212,7 @@ async def execute_deletion(payload: dict[str, Any], orchestrator_url: str) -> No
                     "source_keys_deleted": source_keys_deleted,
                     "chunks_removed": total_chunks_removed,
                     "chat_id": chat_id,
+                    "suppress_telegram": suppress_telegram,
                 },
             },
             timeout=10.0,

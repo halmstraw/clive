@@ -17,6 +17,11 @@ A background task runs every 30 seconds and rejects expired pending actions.
 
 Surface-agnostic: Block 9 does not know about Telegram. It receives and
 emits events. Block 23 manages surface-side confirmation prompts.
+
+suppress_telegram: if True in an incoming payload, Block 9 propagates it
+to all outgoing events so Block 23 can skip the Telegram send.  Used by
+the E2E test suite to prevent test-generated messages reaching the owner
+chat.  Production flows never set this flag.
 """
 
 from __future__ import annotations
@@ -84,6 +89,7 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
     action_target = payload.get("action_target", "")
     action_description = payload.get("action_description", "")
     chat_id = int(payload.get("chat_id", 0))
+    suppress_telegram = bool(payload.get("suppress_telegram", False))
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ACTION_TIMEOUT_SECONDS)
 
@@ -146,6 +152,7 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
             "action_description": action_description,
             "chat_id": chat_id,
             "expires_at": expires_at.isoformat(),
+            "suppress_telegram": suppress_telegram,
         },
     )
     await audit.write(confirmation_event, AlignmentResult.PASS, "emitted")
@@ -168,6 +175,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
 
     action_request_id = uuid.UUID(str(action_request_id_raw))
     confirmed = bool(payload.get("confirmed", False))
+    suppress_telegram = bool(payload.get("suppress_telegram", False))
 
     pool = _get_pool()
     async with pool.acquire() as conn:
@@ -195,6 +203,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
             reason="not_found",
             conversation_id=event.conversation_id,
             chat_id=int(payload.get("chat_id", 0)),
+            suppress_telegram=suppress_telegram,
         )
         await audit.write(_rejection, AlignmentResult.PASS, "emitted")
         await _bus.publish(_rejection)
@@ -219,6 +228,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
             reason="timed_out",
             conversation_id=event.conversation_id,
             chat_id=row["chat_id"],
+            suppress_telegram=suppress_telegram,
         )
         await audit.write(_rejection, AlignmentResult.PASS, "emitted")
         await _bus.publish(_rejection)
@@ -236,6 +246,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
                 "action_target": row["action_target"],
                 "action_description": row["action_description"],
                 "chat_id": row["chat_id"],
+                "suppress_telegram": suppress_telegram,
             },
         )
         await audit.write(confirmed_event, AlignmentResult.PASS, "emitted")
@@ -254,6 +265,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
             reason="owner_rejected",
             conversation_id=event.conversation_id,
             chat_id=row["chat_id"],
+            suppress_telegram=suppress_telegram,
         )
         await audit.write(rejection, AlignmentResult.PASS, "emitted")
         await _bus.publish(rejection)
@@ -285,6 +297,7 @@ def _build_rejection_event(
     reason: str,
     conversation_id: uuid.UUID | None,
     chat_id: int,
+    suppress_telegram: bool = False,
 ) -> CLIVEEvent:
     return CLIVEEvent(
         event_type=ACTION_REJECTED,
@@ -296,6 +309,7 @@ def _build_rejection_event(
             "action_target": action_target,
             "reason": reason,
             "chat_id": chat_id,
+            "suppress_telegram": suppress_telegram,
         },
     )
 
@@ -329,6 +343,8 @@ async def timeout_checker(bus_instance: Any) -> None:
                     reason="timed_out",
                     conversation_id=row["conversation_id"],
                     chat_id=row["chat_id"],
+                    # suppress_telegram not stored in DB — timeout notifications
+                    # always go to the surface (production behaviour)
                 )
                 await audit.write(rejection, AlignmentResult.PASS, "emitted")
                 await bus_instance.publish(rejection)

@@ -388,6 +388,7 @@ def emit_action_pending(
                 "action_description": description,
                 "action_request_id": action_request_id,
                 "chat_id": OWNER_CHAT_ID,
+                "suppress_telegram": True,  # prevent test messages reaching owner chat
             },
         },
     )
@@ -406,6 +407,7 @@ def emit_action_owner_response(action_request_id: str, confirmed: bool) -> None:
                 "action_request_id": action_request_id,
                 "confirmed": confirmed,
                 "chat_id": OWNER_CHAT_ID,
+                "suppress_telegram": True,  # prevent test messages reaching owner chat
             },
         },
     )

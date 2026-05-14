@@ -751,7 +751,14 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
 
     Stores the action_request_id so /confirm_delete and /cancel_delete can
     reference it. Sends confirmation prompt to the owner.
+
+    suppress_telegram: if True in the payload, skips the Telegram send.
+    Used by the E2E test suite to prevent test messages reaching the owner chat.
     """
+    if confirmation_payload.get("suppress_telegram"):
+        log.info("suppress_telegram_confirmation", reason="suppress_telegram=True in payload")
+        return
+
     action_request_id = confirmation_payload.get("action_request_id", "")
     action_description = confirmation_payload.get("action_description", "")
 
@@ -777,13 +784,19 @@ async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) 
     """Receive action.rejected from Block 13 and notify the owner.
 
     Clears the pending delete state regardless of reason.
+
+    suppress_telegram: if True in the payload, skips the Telegram send.
     """
+    # Clear pending state regardless of suppress flag
+    _pending_deletes.pop(chat_id, None)
+
+    if outcome_payload.get("suppress_telegram"):
+        log.info("suppress_telegram_outcome", reason="suppress_telegram=True in payload")
+        return
+
     reason = outcome_payload.get("reason", "unknown")
     action_type = outcome_payload.get("action_type", "")
     action_target = outcome_payload.get("action_target", "")
-
-    # Clear pending state in case it's still set
-    _pending_deletes.pop(chat_id, None)
 
     reason_text = {
         "owner_rejected": "cancelled",
@@ -806,7 +819,14 @@ async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) 
 
 
 async def deliver_deletion_result(result_payload: dict[str, Any], chat_id: int) -> None:
-    """Receive deletion.complete or deletion.not_found from Block 13 and notify owner."""
+    """Receive deletion.complete or deletion.not_found from Block 13 and notify owner.
+
+    suppress_telegram: if True in the payload, skips the Telegram send.
+    """
+    if result_payload.get("suppress_telegram"):
+        log.info("suppress_telegram_deletion_result", reason="suppress_telegram=True in payload")
+        return
+
     event_type = result_payload.get("event_type", "")
     filename = result_payload.get("filename", "")
     chunks_removed = result_payload.get("chunks_removed", 0)

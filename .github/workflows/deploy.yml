@@ -198,3 +198,32 @@ jobs:
               ref: 'main',
               inputs: { reason: 'verify-failed', sha: context.sha }
             })
+
+  e2e:
+    name: E2E — D-106 sign-off
+    runs-on: self-hosted
+    needs: [build, verify]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load runtime config from VM secrets file
+        # Reads TELEGRAM_OWNER_CHAT_ID (needed for action.pending chat_id payloads)
+        # and MINIO_RAW_BUCKET from the on-VM secrets file written by the deploy job.
+        # MinIO root credentials are read at test time via docker exec — not here.
+        run: |
+          SECRETS_FILE=/etc/clive/secrets.env
+          CHAT_ID=$(grep '^TELEGRAM_OWNER_CHAT_ID=' "$SECRETS_FILE" \
+            | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs)
+          BUCKET=$(grep '^MINIO_RAW_BUCKET=' "$SECRETS_FILE" \
+            | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs \
+            || echo "clive-raw-store")
+          echo "TELEGRAM_OWNER_CHAT_ID=${CHAT_ID}" >> "$GITHUB_ENV"
+          echo "MINIO_RAW_BUCKET=${BUCKET:-clive-raw-store}" >> "$GITHUB_ENV"
+
+      - name: Run D-106 E2E test suite
+        # The test creates a throwaway document, exercises the full deletion and
+        # feedback pipeline, then removes the throwaway in a finally block.
+        # The live system is left in the same state it was in before the test ran.
+        run: python3 tests/e2e/d106_e2e.py

@@ -17,6 +17,11 @@ Covers D-106 criteria:
 
 C1 (CI unit tests pass) is verified by the standard CI pipeline, not here.
 
+The test is self-cleaning: it creates d106_throwaway_test.txt at the start
+and removes it at the end (via the teardown step in a finally block),
+regardless of test outcome.  The live system is left in the same state
+it was in before the test ran.
+
 REQUIRED ENV VARS:
   TELEGRAM_OWNER_CHAT_ID     — integer; read from /etc/clive/secrets.env in CI
 
@@ -207,6 +212,21 @@ def minio_object_gone(source_key: str) -> bool:
         capture_output=True, text=True, timeout=30,
     )
     return source_key not in result.stdout
+
+
+def minio_rm(source_key: str) -> None:
+    """Delete a single object from MinIO. Idempotent — missing object is not an error."""
+    user, passwd = _get_minio_creds()
+    subprocess.run(
+        [
+            "docker", "run", "--rm",
+            "--network", f"container:{MINIO_CONTAINER}",
+            "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
+            "minio/mc", "rm", f"local/{MINIO_BUCKET}/{source_key}",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    # Ignore exit code — object may already be absent (idempotent teardown)
 
 
 # ---------------------------------------------------------------------------
@@ -743,6 +763,41 @@ def run_c6() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Teardown — remove throwaway document regardless of test outcome
+# ---------------------------------------------------------------------------
+
+def teardown_throwaway() -> None:
+    """Delete the throwaway document from DB and MinIO if it still exists.
+
+    Called in a finally block so the live system is left in the same state
+    it was in before the test ran — no test artifact persists on pass or fail.
+
+    C3 (the confirmed-deletion criterion) handles teardown as part of the test
+    itself on the happy path.  This function is the safety net for cases where
+    C3 did not run or did not complete (test crash, early failure, timeout, etc.).
+    """
+    # Resolve source_key now, before we delete the DB rows that hold it
+    remaining_sk = source_key_for(THROWAWAY_FILENAME)
+    count = chunk_count_for(THROWAWAY_FILENAME)
+
+    if count > 0:
+        _psql(
+            f"DELETE FROM clive_search.chunks "
+            f"WHERE source_key LIKE '%/{THROWAWAY_FILENAME}';"
+        )
+        print(f"\n[Teardown] Removed {count} stale chunk(s) for {THROWAWAY_FILENAME} from DB")
+    else:
+        print("\n[Teardown] DB already clean — no chunks to remove")
+
+    if remaining_sk and not SKIP_MINIO:
+        if not minio_object_gone(remaining_sk):
+            minio_rm(remaining_sk)
+            print(f"[Teardown] Removed {remaining_sk} from MinIO")
+        else:
+            print("[Teardown] MinIO already clean — object absent")
+
+
+# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 
@@ -820,11 +875,21 @@ def main() -> None:
     #   C3 third  (confirmed delete of throwaway — destructive)
     #   C5 fourth (feedback — independent, uses DB directly)
     #   C6 last   (audit completeness — checks all events from this run)
-    run_c4()
-    run_c2()
-    run_c3(throwaway_source_key)
-    run_c5()
-    run_c6()
+    #
+    # teardown_throwaway() runs in the finally block regardless of outcome,
+    # ensuring the live system is left in the state it started in.
+    try:
+        run_c4()
+        run_c2()
+        run_c3(throwaway_source_key)
+        run_c5()
+        run_c6()
+    finally:
+        try:
+            teardown_throwaway()
+        except Exception as exc:
+            # Teardown errors are non-fatal — report and continue to the result
+            print(f"[Teardown] Warning: cleanup error (non-fatal): {exc}")
 
     # Final report
     report = build_report()

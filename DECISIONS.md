@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-110
+Last decision ID: D-111
 Last updated: 2026-05-14
 
 | ID | Title | Status | Date | Blocks | File |
@@ -119,3 +119,4 @@ Last updated: 2026-05-14
 | D-108 | Framework adoption — narrower subset approved; Redis and OpenJarvis gated on formal review | Accepted | 2026-05-14 | Block 10, Block 13, Block 15, Block 16, Block 17, Block 22 | [D-108-framework-adoption-narrower-subset.md](docs/decisions/D-108-framework-adoption-narrower-subset.md) |
 | D-109 | Telegram deletion command uses /delete <filename> — direct single-step pattern | Accepted | 2026-05-14 | Block 23, Block 4, Block 9, Block 14, Block 16 | [D-109-telegram-delete-command-pattern.md](docs/decisions/D-109-telegram-delete-command-pattern.md) |
 | D-110 | CLIVE v0.3 signed off — all six criteria met 14 May 2026 | Accepted | 2026-05-14 | All blocks | [D-110-v03-signed-off.md](docs/decisions/D-110-v03-signed-off.md) |
+| D-111 | Bug — /ingest caption command fails on Telegram mobile; fix deferred to v0.4 | Accepted | 2026-05-14 | Block 23, Block 14 | [D-111-mobile-ingest-bug.md](docs/decisions/D-111-mobile-ingest-bug.md) |

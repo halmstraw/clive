@@ -1,1 +1,2 @@
-telethon>=1.36
+# No external dependencies — test uses Python stdlib only (subprocess, json, uuid, hashlib)
+# All HTTP calls route through docker exec into containers.

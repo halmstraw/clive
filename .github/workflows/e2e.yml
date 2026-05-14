@@ -1,8 +1,11 @@
 name: E2E — D-106 sign-off
 
-# Run manually. Never on push — this talks to the live bot, ingests and
-# deletes a real document, and calls the LLM. Fire it once after deploying
-# a new version to verify sign-off criteria.
+# Run manually only — this ingests and deletes a real document on the live stack.
+# Fire once after deploying v0.3 to verify all six acceptance criteria.
+#
+# No Telegram MTProto credentials required.  The test posts events directly to
+# the orchestrator via docker exec and verifies DB/MinIO state — Telegram surface
+# delivery is out of scope for backend sign-off.
 on:
   workflow_dispatch:
     inputs:
@@ -10,28 +13,43 @@ on:
         description: "Skip MinIO object verification (1 = skip)"
         required: false
         default: "0"
-      reply_timeout:
-        description: "Seconds to wait for each bot reply"
-        required: false
-        default: "60"
 
 jobs:
   e2e:
-    name: Telegram E2E test suite
+    name: D-106 HTTP-level E2E test suite
     runs-on: self-hosted
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install E2E dependencies
-        run: pip3 install --quiet -r tests/e2e/requirements.txt
+      - name: Load runtime config from VM secrets file
+        # Reads non-secret config values needed by the test.
+        # TELEGRAM_OWNER_CHAT_ID: integer chat ID for action.pending payloads.
+        # MINIO_RAW_BUCKET: bucket name (defaults to clive-raw-store if unset).
+        # MinIO credentials are read at test time via docker exec into the
+        # minio container — they are never exposed to the workflow environment.
+        run: |
+          SECRETS_FILE=/etc/clive/secrets.env
+          if [ ! -f "$SECRETS_FILE" ]; then
+            echo "FATAL: $SECRETS_FILE not found on runner" >&2
+            exit 1
+          fi
+
+          CHAT_ID=$(grep '^TELEGRAM_OWNER_CHAT_ID=' "$SECRETS_FILE" \
+            | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs)
+          if [ -z "$CHAT_ID" ]; then
+            echo "FATAL: TELEGRAM_OWNER_CHAT_ID not found in $SECRETS_FILE" >&2
+            exit 1
+          fi
+
+          BUCKET=$(grep '^MINIO_RAW_BUCKET=' "$SECRETS_FILE" \
+            | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | xargs \
+            || echo "clive-raw-store")
+
+          echo "TELEGRAM_OWNER_CHAT_ID=${CHAT_ID}" >> "$GITHUB_ENV"
+          echo "MINIO_RAW_BUCKET=${BUCKET:-clive-raw-store}" >> "$GITHUB_ENV"
 
       - name: Run D-106 E2E test suite
         env:
-          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
-          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
-          TELEGRAM_SESSION_STRING: ${{ secrets.TELEGRAM_SESSION_STRING }}
-          CLIVE_BOT_USERNAME: ${{ secrets.CLIVE_BOT_USERNAME }}
           SKIP_MINIO_CHECK: ${{ github.event.inputs.skip_minio }}
-          REPLY_TIMEOUT: ${{ github.event.inputs.reply_timeout }}
         run: python3 tests/e2e/d106_e2e.py

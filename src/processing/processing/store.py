@@ -2,6 +2,9 @@
 
 Uses clive_app role (read-write on clive_search).
 Idempotent: ON CONFLICT (content_hash) DO NOTHING (D-025).
+
+asyncpg has no built-in pgvector codec, so embeddings are passed as their
+string representation and cast with ::vector in the SQL statement.
 """
 
 from __future__ import annotations
@@ -42,6 +45,8 @@ async def write_chunks(
         for i, (chunk, embedding, content_hash) in enumerate(
             zip(chunks, embeddings, content_hashes)
         ):
+            # asyncpg has no pgvector codec — pass as string, cast with ::vector
+            embedding_str = str(embedding)
             result = await conn.execute(
                 """
                 INSERT INTO clive_search.chunks
@@ -49,13 +54,13 @@ async def write_chunks(
                      position, source_key, content_hash, content_tsv,
                      document_id)
                 VALUES
-                    ($1, $2, $3, $4, $5, $6, $7,
+                    ($1, $2::vector, $3, $4, $5, $6, $7,
                      to_tsvector('english', $1),
                      gen_random_uuid())
                 ON CONFLICT (content_hash) DO NOTHING
                 """,
                 chunk,
-                embedding,
+                embedding_str,
                 source_key,
                 zone_scope,
                 i,

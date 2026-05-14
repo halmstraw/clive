@@ -29,6 +29,8 @@
     - 03_roles.sql
     - 04_audit_table.sql
     - 05_application_tables.sql
+    - 06_chunks_ingestion_columns.sql
+    - 07_v03_tables.sql
 
 - name: Run SQL init scripts (idempotent)
   ansible.builtin.shell:
@@ -39,6 +41,8 @@
     - 03_roles.sql
     - 04_audit_table.sql
     - 05_application_tables.sql
+    - 06_chunks_ingestion_columns.sql
+    - 07_v03_tables.sql
   become: true
   become_user: clive
   changed_when: true

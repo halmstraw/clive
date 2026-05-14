@@ -37,6 +37,7 @@
     - 04_audit_table.sql
     - 05_application_tables.sql
     - 06_chunks_ingestion_columns.sql
+    - 07_v03_tables.sql
 
 - name: Start Compose stack
   ansible.builtin.command:

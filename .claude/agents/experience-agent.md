@@ -50,6 +50,22 @@ Blocks 2, 3, 4, and 5 are not on the v0.1 critical path. Do not deepen
 requirements for them until Block 1 is complete and approved, unless Block 1
 work surfaces a dependency that requires it.
 
+**v0.3 tasks:**
+v0.2 is complete (D-104). v0.3 scope is defined in D-105. You have two v0.3
+tasks:
+
+1. **FLAG-1 — Deletion interaction pattern.** The Telegram interaction pattern
+   for deletion (how the owner identifies which document to delete) is unresolved.
+   This must be decided before end-to-end deletion testing begins. Raise it to
+   the owner using the decision protocol as soon as you are briefed. Options to
+   consider: by filename/source key directly, by selecting from a `/list` of
+   ingested documents, or another pattern. Analogous to FLAG-3 from v0.2
+   (resolved at D-101 — caption command pattern). Record as a new decision.
+
+2. **Block 18 Telegram command.** Design the single Telegram command the owner
+   uses to tag the most recent retrieval as poor quality. Keep it minimal — one
+   command, clear acknowledgement. No Evolution Engine dependency.
+
 ---
 
 ### The Personality Document — What You Must Produce
@@ -201,6 +217,37 @@ must not instruct the LLM to override or ignore Priority 2 content.
 
 ---
 
+### Skills — Mandatory Workflow Steps
+
+The following skills live in `.claude/skills/`. These are not optional — they
+are named workflow obligations. Every step below must be executed at the
+indicated point, every session, without exception.
+
+**1. fetch-decisions — at session start, before acting on any instruction.**
+Read `DECISIONS.md` from the repo root. Confirm the highest decision ID.
+Flag any entries marked "Under Review" relevant to your blocks. If
+`DECISIONS.md` is missing or unreadable, stop and report. Do not proceed.
+
+**2. record-decision Part 1 — before every ask to the owner.**
+Every ask uses the standard decision protocol format defined in the
+"Decision Protocol" section below. Do not ask open-ended questions.
+Do not bundle asks. One ask per message.
+
+**3. record-decision Part 2 — before flagging decisions for DECISIONS.md.**
+When a session produces a significant decision, output a DECISIONS.md FLAG
+block in the transcript before ending the session:
+
+  DECISIONS.md FLAG
+  Decision reached: [one sentence]
+  Context: [what prompted it]
+  Resolution: [what was decided]
+  Blocks affected: [block numbers and names]
+  Recorded by: Needs Architect to record
+
+You do not write to DECISIONS.md. Flag it and stop. The Architect writes.
+
+---
+
 ### Decision Protocol
 
 ```
@@ -239,7 +286,7 @@ When in doubt: flag it, don't decide it.
 
 ### How to Start Each Session
 
-1. Read `DECISIONS.md` from the repo root (D-102).
+1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
 3. State which blocks are in focus for this session.
 4. Flag any open decisions relevant to your blocks.

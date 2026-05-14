@@ -16,6 +16,12 @@ designs Block 4's rendering contract.
 D-025: idempotent on duplicate query.response (same event_id
 not re-rendered).
 D-028: system notification events rendered as plain messages.
+
+v0.3 additions:
+  /delete <filename>      — T8 deletion, triggers Block 9 confirmation gate
+  /confirm_delete         — owner confirms pending deletion
+  /cancel_delete          — owner cancels pending deletion
+  /bad                    — Block 18: tag most recent retrieval as poor quality
 """
 
 from __future__ import annotations
@@ -47,6 +53,16 @@ _app: Application | None = None
 # D-079 two-step activation state: chat_id → (document_type, version_id)
 # Cleared after confirmation or on a new /activate call.
 _pending_activations: dict[int, tuple[str, str]] = {}
+
+# Block 9 — pending delete confirmation state: chat_id → action_request_id
+# Set when Block 13 pushes action.confirmation_requested.
+# Cleared on /confirm_delete, /cancel_delete, or timeout notification.
+_pending_deletes: dict[int, str] = {}
+
+# Block 18 — last retrieval per chat_id: chat_id → {event_id, chunk_ids, conversation_id}
+# Updated each time a query.response is delivered.
+# Used by /bad to tag the most recent retrieval.
+_last_retrieval: dict[int, dict[str, Any]] = {}
 
 VALID_DOCUMENT_TYPES = {"personality", "alignment_rules"}
 
@@ -139,6 +155,7 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
 
     Called by the HTTP endpoint that Block 13 pushes responses to.
     D-025: idempotent — duplicate event_id not re-rendered.
+    v0.3: stores last_retrieval for Block 18 /bad command.
     """
     event_id = response_payload.get("event_id", "")
 
@@ -150,6 +167,16 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
 
     response_text = response_payload.get("response_text", "")
     confidence = response_payload.get("confidence", {})
+    chunk_ids = response_payload.get("chunk_ids", [])
+
+    # Store last retrieval context for Block 18 (v0.3)
+    # Only update if there was an actual retrieval (chunk_ids present)
+    conversation_id = response_payload.get("conversation_id")
+    _last_retrieval[chat_id] = {
+        "event_id": event_id,
+        "chunk_ids": chunk_ids,
+        "conversation_id": conversation_id,
+    }
 
     # Append low-confidence indicator if retrieval was poor (D-047)
     if not confidence.get("threshold_met", True) and confidence.get("chunks_returned", 1) == 0:
@@ -394,7 +421,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "source_key": document.file_name or "unknown",
                     "reason": "file_too_large",
                     "file_size": document.file_size,
-                    "chat_id": chat_id,                  # D-103 criterion 6 provenance
+                    "chat_id": chat_id,
                 },
             },
         )
@@ -442,7 +469,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "original_filename": original_name,
                 "file_size": document.file_size,
                 "content_type": content_type,
-                "chat_id": chat_id,                      # D-103 criterion 6 provenance
+                "chat_id": chat_id,
             },
         },
     )
@@ -487,3 +514,364 @@ async def deliver_ingest_status(status_payload: dict[str, Any], chat_id: int) ->
     if _app:
         await _app.bot.send_message(chat_id=chat_id, text=text)
         log.info("ingest_status_delivered", event_type=event_type, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# T8 — Deletion commands (v0.3, D-006, D-109)
+# ---------------------------------------------------------------------------
+
+async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /delete <filename> command (D-109).
+
+    Looks up the document by filename in clive_search.chunks.
+    If not found: replies with clear not-found message (D-106 criterion 4).
+    If found: emits action.pending to Block 13 → Block 9 confirmation gate.
+    Block 9 will push action.confirmation_requested back → handle_action_confirmation_push.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage: /delete <filename>\nExample: /delete report.pdf"
+        )
+        return
+
+    filename = " ".join(args).strip()
+    conversation_id = sessions.get_or_create(chat_id)
+
+    # Look up document by filename in Block 16 via the orchestrator retrieval endpoint
+    # We use a direct DB lookup here via the orchestrator's lookup endpoint (D-043 pattern)
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{ORCHESTRATOR_URL}/retrieve/document-by-filename",
+                json={"filename": filename, "zone_scope": "personal"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                await update.message.reply_text(
+                    f"No document named {filename} found."
+                )
+                return
+            log.error("delete_lookup_failed", filename=filename, error=str(exc))
+            await update.message.reply_text("Could not look up the document. Please try again.")
+            return
+        except Exception as exc:
+            log.error("delete_lookup_failed", filename=filename, error=str(exc))
+            await update.message.reply_text("Could not look up the document. Please try again.")
+            return
+
+    source_keys = result.get("source_keys", [])
+    if not source_keys:
+        await update.message.reply_text(f"No document named {filename} found.")
+        return
+
+    # Build human-readable description for Block 9 confirmation message
+    chunk_count = result.get("chunk_count", 0)
+    if len(source_keys) == 1:
+        description = f"Delete {filename} ({chunk_count} chunk(s))."
+    else:
+        description = (
+            f"Delete {filename} — {len(source_keys)} version(s), {chunk_count} chunk(s) total."
+        )
+
+    event_id = uuid.uuid4()
+    await _emit_to_orchestrator(
+        "action.pending",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "action_type": "document.delete",
+                "action_target": filename,
+                "action_description": description,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    log.info(
+        "delete_action_pending",
+        chat_id=chat_id,
+        filename=filename,
+        source_keys_count=len(source_keys),
+    )
+    # Block 9 will push back action.confirmation_requested — handled by
+    # handle_action_confirmation_push HTTP endpoint in main.py
+
+
+async def handle_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /confirm_delete — owner confirms pending deletion.
+
+    Emits action.owner_response with confirmed=True to Block 13 → Block 9.
+    Block 9 will emit action.confirmed → deletion handler.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    action_request_id = _pending_deletes.get(chat_id)
+    if not action_request_id:
+        await update.message.reply_text(
+            "No pending deletion to confirm. Send /delete <filename> first."
+        )
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    await _emit_to_orchestrator(
+        "action.owner_response",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "action_request_id": action_request_id,
+                "confirmed": True,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    # Clear pending state immediately — Block 9 is now responsible
+    _pending_deletes.pop(chat_id, None)
+
+    log.info(
+        "delete_confirmed_by_owner",
+        chat_id=chat_id,
+        action_request_id=action_request_id,
+    )
+    await update.message.reply_text("Confirmed. Deleting...")
+
+
+async def handle_cancel_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /cancel_delete — owner cancels pending deletion.
+
+    Emits action.owner_response with confirmed=False to Block 13 → Block 9.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    action_request_id = _pending_deletes.pop(chat_id, None)
+    if not action_request_id:
+        await update.message.reply_text("No pending deletion to cancel.")
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    await _emit_to_orchestrator(
+        "action.owner_response",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "action_request_id": action_request_id,
+                "confirmed": False,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    log.info(
+        "delete_cancelled_by_owner",
+        chat_id=chat_id,
+        action_request_id=action_request_id,
+    )
+    await update.message.reply_text("Deletion cancelled.")
+
+
+async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat_id: int) -> None:
+    """Receive action.confirmation_requested from Block 13 and prompt the owner.
+
+    Stores the action_request_id so /confirm_delete and /cancel_delete can
+    reference it. Sends confirmation prompt to the owner.
+    """
+    action_request_id = confirmation_payload.get("action_request_id", "")
+    action_description = confirmation_payload.get("action_description", "")
+
+    # Store for /confirm_delete / /cancel_delete
+    _pending_deletes[chat_id] = action_request_id
+
+    text = (
+        f"⚠️ {action_description}\n\n"
+        "Reply /confirm\\_delete to proceed or /cancel\\_delete to abort.\n"
+        "_(No response within 2 minutes cancels automatically.)_"
+    )
+
+    if _app:
+        await _app.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="Markdown",
+        )
+        log.info(
+            "confirmation_prompt_sent",
+            chat_id=chat_id,
+            action_request_id=action_request_id,
+        )
+
+
+async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) -> None:
+    """Receive action.rejected from Block 13 and notify the owner.
+
+    Clears the pending delete state regardless of reason.
+    """
+    reason = outcome_payload.get("reason", "unknown")
+    action_type = outcome_payload.get("action_type", "")
+    action_target = outcome_payload.get("action_target", "")
+
+    # Clear pending state in case it's still set
+    _pending_deletes.pop(chat_id, None)
+
+    reason_text = {
+        "owner_rejected": "cancelled",
+        "timed_out": "timed out — no response received",
+        "not_found": "the document was not found",
+    }.get(reason, reason)
+
+    if action_type == "document.delete":
+        text = f"Deletion of {action_target} {reason_text}."
+    else:
+        text = f"Action {reason_text}."
+
+    if _app:
+        await _app.bot.send_message(chat_id=chat_id, text=text)
+        log.info(
+            "action_outcome_delivered",
+            chat_id=chat_id,
+            reason=reason,
+        )
+
+
+async def deliver_deletion_result(result_payload: dict[str, Any], chat_id: int) -> None:
+    """Receive deletion.complete or deletion.not_found from Block 13 and notify owner."""
+    event_type = result_payload.get("event_type", "")
+    filename = result_payload.get("filename", "")
+    chunks_removed = result_payload.get("chunks_removed", 0)
+
+    if event_type == "deletion.complete":
+        text = f"Deleted. {filename} removed ({chunks_removed} chunk(s) purged)."
+    elif event_type == "deletion.not_found":
+        text = f"No document named {filename} found."
+    else:
+        return
+
+    if _app:
+        await _app.bot.send_message(chat_id=chat_id, text=text)
+        log.info(
+            "deletion_result_delivered",
+            chat_id=chat_id,
+            event_type=event_type,
+            filename=filename,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Block 18 — Feedback command (v0.3, D-100)
+# ---------------------------------------------------------------------------
+
+async def handle_bad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/bad — tag most recent retrieval as poor quality (Block 18).
+
+    Looks up the last retrieval stored in _last_retrieval[chat_id].
+    Writes a feedback record to clive_state.feedback.
+    Emits feedback.explicit to Block 13 for audit (D-067).
+    Acknowledges with a brief confirmation.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    last = _last_retrieval.get(chat_id)
+    if not last:
+        await update.message.reply_text(
+            "No recent retrieval to tag. Send a query first."
+        )
+        return
+
+    retrieval_event_id = last.get("event_id", "")
+    chunk_ids = last.get("chunk_ids", [])
+    conversation_id_str = last.get("conversation_id")
+
+    if not retrieval_event_id:
+        await update.message.reply_text(
+            "No recent retrieval to tag. Send a query first."
+        )
+        return
+
+    # Write feedback record to Block 16 (clive_state.feedback)
+    pool = get_pool()
+    feedback_id = uuid.uuid4()
+    try:
+        import json  # noqa: PLC0415
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO clive_state.feedback
+                    (feedback_id, retrieval_event_id, conversation_id,
+                     owner_chat_id, feedback_type, submitted_at, chunk_ids)
+                VALUES ($1, $2, $3, $4, 'poor_quality', now(), $5::jsonb)
+                """,
+                feedback_id,
+                uuid.UUID(retrieval_event_id),
+                uuid.UUID(conversation_id_str) if conversation_id_str else None,
+                chat_id,
+                json.dumps(chunk_ids),
+            )
+    except Exception as exc:
+        log.error(
+            "feedback_write_failed",
+            chat_id=chat_id,
+            retrieval_event_id=retrieval_event_id,
+            error=str(exc),
+        )
+        await update.message.reply_text(
+            "Could not record feedback. Please try again."
+        )
+        return
+
+    # Emit feedback.explicit to Block 13 for audit (D-067)
+    conversation_id = sessions.get_or_create(chat_id)
+    await _emit_to_orchestrator(
+        "feedback.explicit",
+        {
+            "event_id": str(uuid.uuid4()),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "feedback_id": str(feedback_id),
+                "retrieval_event_id": retrieval_event_id,
+                "feedback_type": "poor_quality",
+                "chat_id": chat_id,
+                "chunk_ids": chunk_ids,
+            },
+        },
+    )
+
+    log.info(
+        "feedback_recorded",
+        chat_id=chat_id,
+        feedback_id=str(feedback_id),
+        retrieval_event_id=retrieval_event_id,
+    )
+
+    await update.message.reply_text("Noted. Tagged as poor quality.")

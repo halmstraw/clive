@@ -2,6 +2,13 @@
 
 Starts the Telegram bot (polling) and an HTTP server that receives
 push responses from Block 13.
+
+v0.3 additions:
+  /delete, /confirm_delete, /cancel_delete — T8 deletion (D-109, D-006)
+  /bad — Block 18 feedback (D-100)
+  /action-confirmation HTTP endpoint — Block 9 push to surface
+  /action-outcome HTTP endpoint — Block 9 rejection/timeout push
+  /deletion-result HTTP endpoint — deletion.complete / deletion.not_found push
 """
 
 from __future__ import annotations
@@ -17,11 +24,18 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from .auth import get_owner_chat_id
 from .bot import (
+    deliver_action_confirmation,
+    deliver_action_outcome,
     deliver_alert,
+    deliver_deletion_result,
     deliver_ingest_status,
     deliver_response,
     handle_activate,
+    handle_bad,
+    handle_cancel_delete,
     handle_confirm_activate,
+    handle_confirm_delete,
+    handle_delete,
     handle_ingest,
     handle_message,
     handle_start,
@@ -60,6 +74,48 @@ async def handle_ingest_status_push(request: web.Request) -> web.Response:
     return web.json_response({"status": "accepted"})
 
 
+async def handle_action_confirmation_push(request: web.Request) -> web.Response:
+    """Receive action.confirmation_requested from Block 13 (Block 9 → surface).
+
+    Block 9 has stored the pending action and now asks Block 23 to prompt
+    the owner for confirmation. Block 23 stores the action_request_id and
+    sends the confirmation prompt.
+    """
+    data = await request.json()
+    chat_id_raw = data.get("chat_id") or data.get("payload", {}).get("chat_id")
+    if chat_id_raw is None:
+        chat_id_raw = get_owner_chat_id()
+    chat_id = int(chat_id_raw)
+    # Flatten payload for deliver_action_confirmation
+    payload = {**data, **data.get("payload", {})}
+    asyncio.create_task(deliver_action_confirmation(payload, chat_id))
+    return web.json_response({"status": "accepted"})
+
+
+async def handle_action_outcome_push(request: web.Request) -> web.Response:
+    """Receive action.rejected from Block 13 (Block 9 rejection/timeout → surface)."""
+    data = await request.json()
+    chat_id_raw = data.get("chat_id") or data.get("payload", {}).get("chat_id")
+    if chat_id_raw is None:
+        chat_id_raw = get_owner_chat_id()
+    chat_id = int(chat_id_raw)
+    payload = {**data, **data.get("payload", {})}
+    asyncio.create_task(deliver_action_outcome(payload, chat_id))
+    return web.json_response({"status": "accepted"})
+
+
+async def handle_deletion_result_push(request: web.Request) -> web.Response:
+    """Receive deletion.complete or deletion.not_found from Block 13."""
+    data = await request.json()
+    chat_id_raw = data.get("chat_id") or data.get("payload", {}).get("chat_id")
+    if chat_id_raw is None:
+        chat_id_raw = get_owner_chat_id()
+    chat_id = int(chat_id_raw)
+    payload = {**data, **data.get("payload", {})}
+    asyncio.create_task(deliver_deletion_result(payload, chat_id))
+    return web.json_response({"status": "accepted"})
+
+
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     return web.json_response({"status": "ok", "block": 23})
 
@@ -69,7 +125,7 @@ async def main() -> None:
 
     log.info("telegram_surface_starting", block=23)
 
-    # Initialise DB pool for D-079 system document activation
+    # Initialise DB pool for D-079 system document activation and Block 18 feedback
     await db.init_pool()
 
     # Build Telegram application
@@ -77,6 +133,15 @@ async def main() -> None:
     application.add_handler(CommandHandler("start", handle_start))
     application.add_handler(CommandHandler("activate", handle_activate))
     application.add_handler(CommandHandler("confirm_activate", handle_confirm_activate))
+
+    # v0.3 — T8 deletion commands (D-109, D-006)
+    application.add_handler(CommandHandler("delete", handle_delete))
+    application.add_handler(CommandHandler("confirm_delete", handle_confirm_delete))
+    application.add_handler(CommandHandler("cancel_delete", handle_cancel_delete))
+
+    # v0.3 — Block 18 feedback command
+    application.add_handler(CommandHandler("bad", handle_bad))
+
     # D-101: caption command — document with /ingest caption
     application.add_handler(
         MessageHandler(filters.Document.ALL & filters.CaptionRegex(r"^/ingest"), handle_ingest)
@@ -89,6 +154,12 @@ async def main() -> None:
     http_app.router.add_post("/response", handle_response_push)
     http_app.router.add_post("/alert", handle_alert_push)
     http_app.router.add_post("/ingest-status", handle_ingest_status_push)
+
+    # v0.3 — Block 9 and deletion result endpoints
+    http_app.router.add_post("/action-confirmation", handle_action_confirmation_push)
+    http_app.router.add_post("/action-outcome", handle_action_outcome_push)
+    http_app.router.add_post("/deletion-result", handle_deletion_result_push)
+
     http_app.router.add_get("/health", handle_health)
 
     runner = web.AppRunner(http_app)

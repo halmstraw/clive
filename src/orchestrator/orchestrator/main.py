@@ -1,8 +1,10 @@
 """Block 13 entry point.
 
-Starts the event bus, audit pool, retrieval pool, and health server.
-Registers push subscribers for Block 8 and Block 23.
+Starts the event bus, audit pool, retrieval pool, action pool, and health server.
+Registers push subscribers for Block 8, Block 9, Block 15, and Block 23.
 Runs until interrupted.
+
+v0.3: Block 9 (Action Layer) added — wires action event lifecycle.
 """
 
 from __future__ import annotations
@@ -13,10 +15,16 @@ import signal
 import structlog
 from dotenv import load_dotenv
 
-from . import audit, retrieval
+from . import action, audit, retrieval
 from .bus import bus
 from .events.taxonomy import (
+    ACTION_CONFIRMED,
+    ACTION_OWNER_RESPONSE,
+    ACTION_PENDING,
+    ACTION_REJECTED,
     ALERT_TRIGGERED,
+    DELETION_COMPLETE,
+    DELETION_NOT_FOUND,
     INGEST_PROCESSED,
     INGEST_RECEIVED,
     INGEST_REJECTED,
@@ -25,7 +33,11 @@ from .events.taxonomy import (
 )
 from .health import start_health_server
 from .push import (
+    push_action_outcome_to_surface,
     push_alert_to_surface,
+    push_confirmed_to_deletion,
+    push_confirmation_to_surface,
+    push_deletion_result_to_surface,
     push_ingest_status_to_surface,
     push_ingest_to_block15,
     push_query_to_block8,
@@ -43,8 +55,9 @@ async def main() -> None:
     # Initialise database pools
     await audit.init_pool()
     await retrieval.init_pool()
+    await action.init_pool()  # Block 9 — Action Layer (v0.3)
 
-    # Register push subscribers
+    # Register push subscribers — Block 8 query
     bus.subscribe(QUERY_RECEIVED, block_id=8, handler=push_query_to_block8)
     bus.subscribe(QUERY_RESPONSE, block_id=23, handler=push_response_to_surface)
     bus.subscribe(ALERT_TRIGGERED, block_id=23, handler=push_alert_to_surface)
@@ -54,9 +67,27 @@ async def main() -> None:
     bus.subscribe(INGEST_PROCESSED, block_id=23, handler=push_ingest_status_to_surface)
     bus.subscribe(INGEST_REJECTED, block_id=23, handler=push_ingest_status_to_surface)
 
+    # Block 9 — Action Layer (v0.3, D-006)
+    # action.pending → Block 9 handler (stores state, emits confirmation_requested)
+    bus.subscribe(ACTION_PENDING, block_id=9, handler=action.handle_action_pending)
+    # action.confirmation_requested → Block 23 (prompts owner)
+    bus.subscribe(ACTION_CONFIRMATION_REQUESTED, block_id=23, handler=push_confirmation_to_surface)
+    # action.owner_response → Block 9 handler (resolves: confirmed or rejected)
+    bus.subscribe(ACTION_OWNER_RESPONSE, block_id=9, handler=action.handle_action_owner_response)
+    # action.confirmed → Block 15 deletion handler
+    bus.subscribe(ACTION_CONFIRMED, block_id=15, handler=push_confirmed_to_deletion)
+    # action.rejected → Block 23 (notifies owner)
+    bus.subscribe(ACTION_REJECTED, block_id=23, handler=push_action_outcome_to_surface)
+    # deletion results → Block 23
+    bus.subscribe(DELETION_COMPLETE, block_id=23, handler=push_deletion_result_to_surface)
+    bus.subscribe(DELETION_NOT_FOUND, block_id=23, handler=push_deletion_result_to_surface)
+
     # Start health + API server
     runner = await start_health_server()
     log.info("health_server_started", port=8080)
+
+    # Block 9 — timeout checker background task (D-006: timeout = rejection)
+    timeout_task = asyncio.create_task(action.timeout_checker(bus))
 
     log.info("orchestrator_ready")
 
@@ -69,6 +100,11 @@ async def main() -> None:
     await stop.wait()
 
     log.info("orchestrator_shutting_down")
+    timeout_task.cancel()
+    try:
+        await timeout_task
+    except asyncio.CancelledError:
+        pass
     await runner.cleanup()
 
 

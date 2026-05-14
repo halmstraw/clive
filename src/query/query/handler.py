@@ -4,6 +4,10 @@ Receives query.received event, assembles context, calls LLM,
 emits query.response. Handles action-intent queries (D-045).
 Idempotent via response cache (D-046).
 Confidence signal is retrieval quality only (D-047).
+
+v0.3: query.response payload now includes chunk_ids (list of chunk UUIDs
+returned in this retrieval). Block 18 (Feedback) uses this to tag the
+specific chunks that were poor quality.
 """
 
 from __future__ import annotations
@@ -83,7 +87,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     3. Check for action intent (D-045)
     4. Assemble context (D-044)
     5. Call LLM (D-077)
-    6. Emit query.response
+    6. Emit query.response (with chunk_ids for Block 18, v0.3)
     """
     event_id = uuid.UUID(event["event_id"])
     conversation_id = uuid.UUID(event["conversation_id"])
@@ -120,6 +124,7 @@ async def handle_query(event: dict[str, Any]) -> None:
             "event_id": str(event_id),
             "response_text": response_text,
             "confidence": {"chunks_returned": 0, "highest_relevance_score": 0.0, "threshold_met": False},
+            "chunk_ids": [],  # No retrieval performed
         }
         cache.set(conversation_id, event_id, response_payload)
         await _emit_event("query.response", {**response_payload, "conversation_id": str(conversation_id)})
@@ -161,6 +166,9 @@ async def handle_query(event: dict[str, Any]) -> None:
     ranked_chunks = retrieval_result.get("ranked_chunks", [])
     confidence = _compute_confidence(ranked_chunks)
 
+    # Extract chunk_ids for Block 18 (v0.3) — list of UUIDs from this retrieval
+    chunk_ids = [c["chunk_id"] for c in ranked_chunks if "chunk_id" in c]
+
     # 5. Retrieve conversation history from event payload
     conversation_history = event.get("conversation_history", [])
 
@@ -182,10 +190,12 @@ async def handle_query(event: dict[str, Any]) -> None:
     )
 
     # 8. Build response and cache it
+    # chunk_ids included so Block 18 can tag specific chunks as poor quality
     response_payload = {
         "event_id": str(event_id),
         "response_text": response_text,
         "confidence": confidence,
+        "chunk_ids": chunk_ids,
     }
     cache.set(conversation_id, event_id, response_payload)
 

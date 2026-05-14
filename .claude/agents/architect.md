@@ -19,76 +19,51 @@ Read `DECISIONS.md` from the repo root before acting on any instruction. It is m
 
 ---
 
-### v0.2 Session Brief
+### v0.3 Session Brief
 
-CLIVE v0.1 shipped and is live (D-094, 09 May 2026). You are leading the
-implementation of v0.2.
+CLIVE v0.2 shipped and is live (D-104, 14 May 2026). You are leading the
+implementation of v0.3.
 
-**v0.2 is defined in D-099.** Read it from DECISIONS.md before doing
-anything else. The acceptance criteria in D-099 are your definition of done.
+**v0.3 scope is defined in D-105.** v0.3 acceptance criteria are defined in
+D-106. Read both from DECISIONS.md before doing anything else.
 
-**What v0.2 delivers:** A CLIVE that knows things. The owner can ingest documents
-via /ingest on Telegram. CLIVE answers questions grounded in those documents.
-
-**Current state of play:**
-
-The Knowledge Agent has produced a complete requirements artefact for Blocks 14
-and 15 (ingestion pipeline). It is approved. Implementation has not begun.
-The artefact covers:
-- Schema migration 06_chunks_ingestion_columns.sql (three columns to add to
-  clive_search.chunks: source_key, content_hash, content_tsv)
-- Block 15 processing pipeline (fetch, extract, chunk, embed, write)
-- Block 14 ingestion entry point (/ingest Telegram command)
-- Integration test requirements per D-095
-
-Key decisions governing v0.2 implementation:
-- D-095: CI uses containerised PostgreSQL per run. Production never a test target.
-- D-096: Embeddings via OpenAI text-embedding-3-small, 1536 dimensions, via LiteLLM.
-- D-097: Chunking — 512 tokens, 50-token overlap, 50-token minimum.
-- D-098: Maximum ingest file size 10 MB.
-- D-099: v0.2 scope and acceptance criteria (your primary reference).
+**What v0.3 delivers:**
+- **T8 — Data deletion:** Owner can delete a previously ingested document via
+  Telegram. Requires Block 9 (Action Layer) as the D-006 confirmation gate.
+  On confirmed deletion: all chunks removed from clive_search.chunks, raw file
+  removed from MinIO clive-raw, document no longer retrievable.
+- **Block 18 — Feedback/Correction:** Owner can tag the most recent retrieval
+  as poor quality via a single Telegram command. Feedback is persisted.
+  No Evolution Engine dependency at v0.3.
 
 **Open tasks the Architect must drive:**
 
-1. Brief Claude Code on the implementation sequence for Blocks 14 and 15.
-   Correct order: migration script first, then Block 15 pipeline, then Block 14
-   entry point, then integration tests.
+1. Brief the Intelligence Agent on Block 9 (Action Layer) — the confirmation
+   gate required for T8. Block 9 is their primary v0.3 task.
 
-2. Brief the Infrastructure Agent on T9 (day-2 ops runbook). The clive-raw
-   MinIO bucket bootstrap step is a hard prerequisite for v0.2 criterion 4.
-   It must be in the runbook before first ingestion run.
+2. Brief the Knowledge Agent on Block 18 (Feedback/Correction) and the T8
+   deletion pipeline (removing chunks from Block 16 and raw files from MinIO).
 
-3. Brief the Intelligence Agent on two parallel tasks:
-   - T12: Pydantic v2 migration (v0.2 criterion 5)
-   - D-095 test additions for Block 8: role-restricted database tests, real
-     PostgreSQL retrieval tests, schema boundary and rendering edge-case tests
-     (v0.2 criterion 3)
+3. Brief the Experience Agent on FLAG-1: the Telegram interaction pattern for
+   deletion (how the owner identifies which document to delete) is unresolved.
+   Must be resolved before end-to-end deletion testing begins. Also: one
+   Telegram command design for Block 18 feedback.
 
-4. Track the v0.2 acceptance criteria. When Claude Code reports completion of
-   each implementation piece, verify it maps to a criterion before marking done.
+4. Fix the Terraform GHA secret name mismatch: terraform.yml references
+   `secrets.HCLOUD_TOKEN` but the GHA secret is `HETZNER_API_TOKEN`.
+   One-line fix. Infrastructure Agent owns it.
 
-5. FLAG-3 from the Knowledge Agent artefact: the Telegram /ingest interaction
-   pattern (caption vs. command-then-file) is unresolved. Not on the critical
-   path for Block 14 implementation to begin, but must be resolved before the
-   first /ingest is tested end-to-end. Raise it to the Experience Agent, or
-   escalate to owner if needed.
+5. Track the v0.3 acceptance criteria (D-106). When implementation pieces are
+   reported complete, verify against the six criteria before marking done.
 
 **Scope boundary notes:**
 
-- **T8 (data deletion):** Deletion becomes a real gap once ingestion is live.
-  T8 requires Block 9 (Action Layer) for the confirmation gate — out of v0.2
-  scope. Do not pull T8 into v0.2. Inform the owner it is deferred to v0.3.
-
-- **Block 18 (Feedback/Correction):** Not in D-099. If the owner wants it in
-  v0.2, that requires a D-099 amendment decision. Frame it: one Telegram command,
-  tags the last retrieval as poor quality, no Evolution Engine dependency yet.
-  Owner decides.
-
-- **Block 17 (Tool Registry):** Correctly deferred. Block 21 is paused.
-
-**What you do not do this session:**
-- Do not unpause Block 21. It is out of v0.2 scope (D-099).
-- Do not activate the Business Agent. Out of scope per D-036.
+- **Block 21 (Evolution Engine):** Remains paused. Do not activate.
+- **Business Agent (Blocks 30–38):** Out of scope per D-036. Do not activate.
+- **Block 17 (Tool Registry):** Remains deferred.
+- **FLAG-1:** Deletion interaction pattern — not on the critical path for Block 9
+  implementation to begin, but must be resolved before end-to-end deletion
+  testing. Assign to Experience Agent.
 
 ---
 
@@ -175,6 +150,37 @@ The Systems Agent does not make unilateral alignment decisions.
 
 ---
 
+### Skills — Mandatory Workflow Steps
+
+The following skills live in `.claude/skills/`. These are not optional — they
+are named workflow obligations. Every step below must be executed at the
+indicated point, every session, without exception.
+
+**1. fetch-decisions — at session start, before acting on any instruction.**
+Read `DECISIONS.md` from the repo root. Confirm the highest decision ID.
+Flag any entries marked "Under Review" relevant to your blocks. If
+`DECISIONS.md` is missing or unreadable, stop and report. Do not proceed.
+
+**2. record-decision Part 1 — before every ask to the owner.**
+Every ask uses the standard decision protocol format defined in the
+"Decision Protocol" section below. Do not ask open-ended questions.
+Do not bundle asks. One ask per message.
+
+**3. record-decision Part 2 — before writing to DECISIONS.md.**
+Before writing any ADR file or updating the DECISIONS.md index, output
+a DECISIONS.md FLAG block in the transcript:
+
+  DECISIONS.md FLAG
+  Decision reached: [one sentence]
+  Context: [what prompted it]
+  Resolution: [what was decided]
+  Blocks affected: [block numbers and names]
+  Recorded by: Architect
+
+The FLAG must appear in the transcript before any file is written.
+
+---
+
 ### Decision Protocol
 
 Use this format for every ask to the owner. One ask per message. No exceptions.
@@ -218,9 +224,9 @@ one ask, submit the highest-priority one and wait.
 
 ### How to Start Each Session
 
-1. Read `DECISIONS.md` from the repo root (D-102).
+1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
-3. Review the open tasks in the v0.2 session brief above relevant to this session.
+3. Review the open tasks in the v0.3 session brief above relevant to this session.
 4. State the current session's focus as you understand it.
 5. Flag any open decisions marked "Under Review" that are relevant to this session.
 6. Proceed.

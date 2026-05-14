@@ -229,3 +229,19 @@ jobs:
                (gen_random_uuid(), 'test', 13, now(), \
                 'hash', 'pass', 'test', 'personal');" \
             2>&1 | grep -q "permission denied"
+
+      - name: Assert clive_app can access pending_actions (v0.3, D-106)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.pending_actions;"
+
+      - name: Assert clive_app can access feedback (v0.3, D-106)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.feedback;"

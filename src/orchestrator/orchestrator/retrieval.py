@@ -6,6 +6,8 @@ the query.submitted event lifecycle.
 
 At v0.1 this is a direct async function call to the storage
 layer, logged but not a full event bus round-trip.
+
+v0.3: retrieve_document_by_filename added for T8 deletion lookup (D-109).
 """
 
 from __future__ import annotations
@@ -150,3 +152,47 @@ async def retrieve_system_document(
         "version_timestamp": row["created_at"].isoformat(),
         "is_active": row["is_active"],
     }
+
+
+async def retrieve_document_by_filename(
+    filename: str,
+    zone_scope: str,
+) -> dict[str, Any]:
+    """Look up all source_keys matching a given filename in Block 16.
+
+    D-109: source_key format is {uuid}/{original_filename}.
+    Matches WHERE source_key LIKE '%/' || filename.
+
+    Returns {source_keys: [...], chunk_count: N}.
+    If no match: source_keys = [], chunk_count = 0.
+    """
+    if _pool is None:
+        raise RuntimeError("Retrieval pool not initialised")
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT source_key, count(*) AS chunk_count
+            FROM clive_search.chunks
+            WHERE source_key LIKE '%/' || $1
+            AND zone_of_origin = $2
+            GROUP BY source_key
+            """,
+            filename,
+            zone_scope,
+        )
+
+    if not rows:
+        return {"source_keys": [], "chunk_count": 0}
+
+    source_keys = [row["source_key"] for row in rows]
+    total_chunks = sum(int(row["chunk_count"]) for row in rows)
+
+    log.info(
+        "document_lookup_by_filename",
+        filename=filename,
+        source_keys_count=len(source_keys),
+        total_chunks=total_chunks,
+    )
+
+    return {"source_keys": source_keys, "chunk_count": total_chunks}

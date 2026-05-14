@@ -1,4 +1,11 @@
-"""Push routing — Block 13 outbound delivery to Block 8, Block 15, and Block 23."""
+"""Push routing — Block 13 outbound delivery to Block 8, Block 15, and Block 23.
+
+v0.3: added Block 9 action layer push functions:
+  push_confirmation_to_surface     — action.confirmation_requested → Block 23
+  push_action_outcome_to_surface   — action.rejected → Block 23
+  push_confirmed_to_deletion       — action.confirmed → Block 15 deletion handler
+  push_deletion_result_to_surface  — deletion.complete / deletion.not_found → Block 23
+"""
 
 from __future__ import annotations
 
@@ -69,6 +76,79 @@ async def push_ingest_status_to_surface(event: CLIVEEvent) -> None:
     async with httpx.AsyncClient() as client:
         await client.post(
             f"{TELEGRAM_URL}/ingest-status",
+            json={
+                "event_type": event.event_type,
+                "event_id": str(event.event_id),
+                "conversation_id": str(event.conversation_id) if event.conversation_id else None,
+                **event.payload,
+            },
+            timeout=10.0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Block 9 — Action Layer push functions (v0.3)
+# ---------------------------------------------------------------------------
+
+async def push_confirmation_to_surface(event: CLIVEEvent) -> None:
+    """Push action.confirmation_requested to Block 23 (Telegram surface).
+
+    Block 23 uses this to send the confirmation prompt to the owner and
+    store the pending action_request_id for the /confirm_delete response.
+    """
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{TELEGRAM_URL}/action-confirmation",
+            json={
+                "event_id": str(event.event_id),
+                "conversation_id": str(event.conversation_id) if event.conversation_id else None,
+                **event.payload,
+            },
+            timeout=10.0,
+        )
+
+
+async def push_action_outcome_to_surface(event: CLIVEEvent) -> None:
+    """Push action.rejected to Block 23 (Telegram surface).
+
+    Notifies the owner that a deletion was cancelled, timed out, or not found.
+    """
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{TELEGRAM_URL}/action-outcome",
+            json={
+                "event_type": event.event_type,
+                "event_id": str(event.event_id),
+                "conversation_id": str(event.conversation_id) if event.conversation_id else None,
+                **event.payload,
+            },
+            timeout=10.0,
+        )
+
+
+async def push_confirmed_to_deletion(event: CLIVEEvent) -> None:
+    """Push action.confirmed to Block 15 deletion handler.
+
+    Block 15's /delete endpoint executes the deletion and emits
+    deletion.complete or deletion.not_found back to Block 13.
+    """
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{PROCESSING_SERVICE_URL}/delete",
+            json={
+                "event_id": str(event.event_id),
+                "conversation_id": str(event.conversation_id) if event.conversation_id else None,
+                **event.payload,
+            },
+            timeout=30.0,
+        )
+
+
+async def push_deletion_result_to_surface(event: CLIVEEvent) -> None:
+    """Push deletion.complete or deletion.not_found to Block 23 (Telegram surface)."""
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{TELEGRAM_URL}/deletion-result",
             json={
                 "event_type": event.event_type,
                 "event_id": str(event.event_id),

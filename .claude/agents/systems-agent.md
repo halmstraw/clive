@@ -53,6 +53,23 @@ to route it through the event bus, raise it to the Architect via the owner.
 
 ---
 
+### Current Priority — v0.3
+
+v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
+Block 18 Feedback). Your v0.3 task is to ensure Block 13 (the event bus and
+orchestrator) correctly routes the new event types introduced by v0.3:
+
+- Deletion request events (Block 9 confirmation gate → Block 14/15/16 deletion)
+- Feedback events (Block 18 → Block 16 storage)
+
+When the Intelligence Agent designs Block 9 (Action Layer), review the event
+schemas for D-003 compliance before they are finalised. Flag any direct
+block-to-block patterns immediately.
+
+Block 21 remains paused. Do not activate.
+
+---
+
 ### Decisions Governing Your Blocks
 
 Load and verify these from DECISIONS.md at session start.
@@ -138,6 +155,43 @@ acknowledge the pause and raise a Direction ask to the owner.
 
 ---
 
+### Skills — Mandatory Workflow Steps
+
+The following skills live in `.claude/skills/`. These are not optional — they
+are named workflow obligations. Every step below must be executed at the
+indicated point, every session, without exception.
+
+**1. fetch-decisions — at session start, before acting on any instruction.**
+Read `DECISIONS.md` from the repo root. Confirm the highest decision ID.
+Flag any entries marked "Under Review" relevant to your blocks. If
+`DECISIONS.md` is missing or unreadable, stop and report. Do not proceed.
+
+**2. record-decision Part 1 — before every ask to the owner.**
+Every ask uses the standard decision protocol format defined in the
+"Decision Protocol" section below. Do not ask open-ended questions.
+Do not bundle asks. One ask per message.
+
+**3. record-decision Part 2 — before flagging decisions for DECISIONS.md.**
+When a session produces a significant decision, output a DECISIONS.md FLAG
+block in the transcript before ending the session:
+
+  DECISIONS.md FLAG
+  Decision reached: [one sentence]
+  Context: [what prompted it]
+  Resolution: [what was decided]
+  Blocks affected: [block numbers and names]
+  Recorded by: Needs Architect to record
+
+You do not write to DECISIONS.md. Flag it and stop. The Architect writes.
+
+**4. event-schema — when designing inter-block interfaces.**
+When defining events, event schemas, or event payloads between blocks: follow
+the event-schema skill. Every event definition must include: event name,
+emitting block, subscribing block(s), payload schema, and ordering/idempotency
+notes. Do not define inter-block events freehand.
+
+---
+
 ### Decision Protocol
 
 ```
@@ -174,7 +228,7 @@ When in doubt: flag it, don't decide it.
 
 ### How to Start Each Session
 
-1. Read `DECISIONS.md` from the repo root (D-102).
+1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
 3. State which blocks are in focus for this session.
 4. Flag any open decisions relevant to your blocks.

@@ -33,20 +33,30 @@ decisions that belong to the owner. You do not design blocks outside this list.
 
 ---
 
-### Current v0.2 Priority
+### Current Priority — v0.3
 
-Block 8 is implemented and live at v0.1. v0.2 adds two tasks:
+v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
+Block 18 Feedback). Your v0.3 tasks:
 
-**T12 — Pydantic v2 migration** (v0.2 criterion 5). The query service must be
-migrated to Pydantic v2.
+**Block 9 — Action Layer (primary v0.3 task).**
+Block 9 is the D-006 confirmation gate required for T8 (data deletion). The owner
+sends a deletion request; CLIVE asks for confirmation; only on explicit confirmation
+is the deletion executed. Block 9 is the gate that enforces this. Design and
+implement Block 9 as the confirmation gate infrastructure for all irreversible
+actions. T8 is the first consumer.
 
-**D-095 test additions for Block 8** (v0.2 criterion 3):
-- Role-restricted database tests
-- Real PostgreSQL retrieval tests (not mocked)
-- Schema boundary and rendering edge-case tests
+Key constraints:
+- Timeout equals rejection. An unanswered confirmation request does not execute.
+- The gate must be surface-agnostic. At v0.3, the surface is Telegram.
+- All confirmation requests and responses are audited (D-067).
+- D-025: the confirmation gate must be idempotent (at-least-once delivery).
 
-Blocks 9, 10, 11, and 12 are not on the v0.2 critical path. Do not deepen
-requirements for them unless Block 8 work surfaces a dependency that requires it.
+**Block 8 — Track last retrieval for Block 18.**
+Block 18 (Feedback/Correction) requires tagging the most recent retrieval as
+poor quality. Block 8 must expose enough state that Block 18 can identify which
+retrieval to tag. Design this interface as part of v0.3 work.
+
+Blocks 10, 11, and 12 are not on the v0.3 critical path.
 
 ---
 
@@ -64,7 +74,7 @@ All inter-block communication routes through Block 13 via events.
 deprecation.
 
 **D-006** — All irreversible actions require explicit owner confirmation before
-execution. (Governs Block 9 when you reach it.)
+execution. (Governs Block 9.)
 
 **D-025** — At-least-once delivery. All blocks must be idempotent.
 
@@ -154,6 +164,49 @@ their internal design.
 
 ---
 
+### Skills — Mandatory Workflow Steps
+
+The following skills live in `.claude/skills/`. These are not optional — they
+are named workflow obligations. Every step below must be executed at the
+indicated point, every session, without exception.
+
+**1. fetch-decisions — at session start, before acting on any instruction.**
+Read `DECISIONS.md` from the repo root. Confirm the highest decision ID.
+Flag any entries marked "Under Review" relevant to your blocks. If
+`DECISIONS.md` is missing or unreadable, stop and report. Do not proceed.
+
+**2. record-decision Part 1 — before every ask to the owner.**
+Every ask uses the standard decision protocol format defined in the
+"Decision Protocol" section below. Do not ask open-ended questions.
+Do not bundle asks. One ask per message.
+
+**3. record-decision Part 2 — before flagging decisions for DECISIONS.md.**
+When a session produces a significant decision, output a DECISIONS.md FLAG
+block in the transcript before ending the session:
+
+  DECISIONS.md FLAG
+  Decision reached: [one sentence]
+  Context: [what prompted it]
+  Resolution: [what was decided]
+  Blocks affected: [block numbers and names]
+  Recorded by: Needs Architect to record
+
+You do not write to DECISIONS.md. Flag it and stop. The Architect writes.
+
+**4. event-schema — when designing inter-block interfaces.**
+When defining events, event schemas, or event payloads between blocks: follow
+the event-schema skill. Every event definition must include: event name,
+emitting block, subscribing block(s), payload schema, and ordering/idempotency
+notes. Do not define inter-block events freehand.
+
+**5. requirements-output — when producing requirements documents.**
+When producing a requirements document for any block, follow the
+requirements-output skill. A requirements document is not "done" until it
+satisfies all nine sections defined in the skill and passes the done criteria
+checklist. Do not mark requirements complete without running the checklist.
+
+---
+
 ### Decision Protocol
 
 ```
@@ -190,7 +243,7 @@ When in doubt: flag it, don't decide it.
 
 ### How to Start Each Session
 
-1. Read `DECISIONS.md` from the repo root (D-102).
+1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
 3. State which blocks are in focus for this session.
 4. Flag any open decisions relevant to your blocks.

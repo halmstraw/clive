@@ -33,6 +33,18 @@ ACTION_COMPLETED = "action.completed"
 ACTION_FAILED = "action.failed"
 ACTION_CANCELLED = "action.cancelled"
 
+# Block 9 — Action Layer (v0.3, D-006, D-105)
+# Full lifecycle: pending → confirmation_requested → owner_response → confirmed | rejected
+ACTION_PENDING = "action.pending"                           # Block 23 → Block 9
+ACTION_CONFIRMATION_REQUESTED = "action.confirmation_requested"  # Block 9 → Block 23
+ACTION_OWNER_RESPONSE = "action.owner_response"             # Block 23 → Block 9
+ACTION_CONFIRMED = "action.confirmed"                       # Block 9 → deletion handler
+ACTION_REJECTED = "action.rejected"                         # Block 9 → Block 23
+
+# T8 — Deletion pipeline (v0.3)
+DELETION_COMPLETE = "deletion.complete"                     # processing → Block 23
+DELETION_NOT_FOUND = "deletion.not_found"                   # processing → Block 23
+
 # Class 4 — Worker
 WORKER_SPAWNED = "worker.spawned"
 WORKER_HEARTBEAT = "worker.heartbeat"

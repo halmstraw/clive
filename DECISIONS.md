@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-104
+Last decision ID: D-109
 Last updated: 2026-05-14
 
 | ID | Title | Status | Date | Blocks | File |
@@ -113,3 +113,8 @@ Last updated: 2026-05-14
 | D-102 | Decisions migrated from Notion to local ADR files | Accepted | 2026-05-13 | Block 29 | [D-102-decisions-to-local-adr-files.md](docs/decisions/D-102-decisions-to-local-adr-files.md) |
 | D-103 | CLIVE v0.2 acceptance criteria defined | Accepted | 2026-05-13 | All blocks | [D-103-v02-acceptance-criteria.md](docs/decisions/D-103-v02-acceptance-criteria.md) |
 | D-104 | CLIVE v0.2 signed off; all six criteria met 14 May 2026 | Accepted | 2026-05-14 | All blocks | [D-104-v02-signed-off.md](docs/decisions/D-104-v02-signed-off.md) |
+| D-105 | CLIVE v0.3 scope approved — T8 (deletion) + Block 18 (Feedback) | Accepted | 2026-05-14 | Block 9, Block 14, Block 15, Block 16, Block 18, Block 23 | [D-105-v03-scope-approved.md](docs/decisions/D-105-v03-scope-approved.md) |
+| D-106 | CLIVE v0.3 acceptance criteria defined | Accepted | 2026-05-14 | Block 9, Block 14, Block 15, Block 16, Block 18, Block 23, Block 28 | [D-106-v03-acceptance-criteria.md](docs/decisions/D-106-v03-acceptance-criteria.md) |
+| D-107 | Explicit skill workflow steps added to all agent files | Accepted | 2026-05-14 | Block 29 | [D-107-explicit-skill-steps-in-agent-files.md](docs/decisions/D-107-explicit-skill-steps-in-agent-files.md) |
+| D-108 | Framework adoption — narrower subset approved; Redis and OpenJarvis gated on formal review | Accepted | 2026-05-14 | Block 10, Block 13, Block 15, Block 16, Block 17, Block 22 | [D-108-framework-adoption-narrower-subset.md](docs/decisions/D-108-framework-adoption-narrower-subset.md) |
+| D-109 | Telegram deletion command uses /delete <filename> — direct single-step pattern | Accepted | 2026-05-14 | Block 23, Block 4, Block 9, Block 14, Block 16 | [D-109-telegram-delete-command-pattern.md](docs/decisions/D-109-telegram-delete-command-pattern.md) |

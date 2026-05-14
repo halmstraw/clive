@@ -31,7 +31,7 @@ Read `DECISIONS.md` from the repo root before acting on any instruction. It is m
 
 ### v0.1 Implementation State
 
-The following was completed for v0.1. Use as reference context for v0.2 work.
+The following was completed for v0.1. Use as reference context for v0.2/v0.3 work.
 
 **Block 25 (Observability) — requirements complete.**
 - Logging, tracing, metrics, alerting, and evolution history view specified.
@@ -95,13 +95,20 @@ Pipeline files:
 
 ---
 
-### Current v0.2 Priority
+### Current Priority — v0.3
 
-**T9 — Day-2 ops runbook.**
-The clive-raw MinIO bucket must exist before any ingestion run. This bootstrap
-step was flagged during v0.2 planning. It must be documented in the ops runbook
-before the first /ingest is tested end-to-end. This is a hard prerequisite for
-v0.2 criterion 4.
+v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
+Block 18 Feedback). Your v0.3 task:
+
+**Fix the Terraform GHA secret name mismatch.**
+`terraform.yml` references `secrets.HCLOUD_TOKEN` but the GHA secret is named
+`HETZNER_API_TOKEN`. Terraform will fail if run. Fix is a one-line change in
+`terraform.yml`. This is a maintenance item — fix it before any infrastructure
+changes are needed.
+
+Monitor v0.3 for any infrastructure or CI/CD implications from the new deletion
+and feedback capabilities. If new audit event types require schema changes that
+affect the CI pipeline, flag them.
 
 ---
 
@@ -198,6 +205,37 @@ explicit handling defined.
 
 ---
 
+### Skills — Mandatory Workflow Steps
+
+The following skills live in `.claude/skills/`. These are not optional — they
+are named workflow obligations. Every step below must be executed at the
+indicated point, every session, without exception.
+
+**1. fetch-decisions — at session start, before acting on any instruction.**
+Read `DECISIONS.md` from the repo root. Confirm the highest decision ID.
+Flag any entries marked "Under Review" relevant to your blocks. If
+`DECISIONS.md` is missing or unreadable, stop and report. Do not proceed.
+
+**2. record-decision Part 1 — before every ask to the owner.**
+Every ask uses the standard decision protocol format defined in the
+"Decision Protocol" section below. Do not ask open-ended questions.
+Do not bundle asks. One ask per message.
+
+**3. record-decision Part 2 — before flagging decisions for DECISIONS.md.**
+When a session produces a significant decision, output a DECISIONS.md FLAG
+block in the transcript before ending the session:
+
+  DECISIONS.md FLAG
+  Decision reached: [one sentence]
+  Context: [what prompted it]
+  Resolution: [what was decided]
+  Blocks affected: [block numbers and names]
+  Recorded by: Needs Architect to record
+
+You do not write to DECISIONS.md. Flag it and stop. The Architect writes.
+
+---
+
 ### Decision Protocol
 
 ```
@@ -234,7 +272,7 @@ When in doubt: flag it, don't decide it.
 
 ### How to Start Each Session
 
-1. Read `DECISIONS.md` from the repo root (D-102).
+1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
 3. State which blocks are in focus for this session.
 4. Flag any open decisions relevant to your blocks.

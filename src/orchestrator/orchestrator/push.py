@@ -1,11 +1,12 @@
 """Push routing — Block 13 outbound delivery to Block 8, Block 15, and Block 23.
 
 All push functions call raise_for_status() so HTTP 4xx/5xx responses from
-downstream services are raised as exceptions. The retry mechanism in with_retry
-will then catch them and retry with backoff (D-055). Without raise_for_status(),
-HTTP errors would be silently swallowed and the delivery would appear to succeed.
+downstream services are raised as exceptions and retried with backoff (D-055).
 
-v0.3: added Block 9 action layer push functions.
+Every push function that delivers to the surface includes event_id explicitly
+so Block 23's idempotency check has a stable key to work with. Omitting
+event_id causes event_id="" at the surface, which poisons the idempotency
+set and blocks all subsequent responses.
 """
 
 from __future__ import annotations
@@ -40,11 +41,22 @@ async def push_query_to_block8(event: CLIVEEvent) -> None:
 
 
 async def push_response_to_surface(event: CLIVEEvent) -> None:
-    """Push query.response to Block 23 (Telegram surface)."""
+    """Push query.response to Block 23 (Telegram surface).
+
+    event_id is explicitly included from event.event_id — it is NOT in
+    event.payload (the CLIVEEvent model puts declared fields like event_id
+    on the object, not in the payload dict). Without this, deliver_response
+    receives event_id="" and the idempotency cache blocks all responses
+    after the first one.
+    """
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{TELEGRAM_URL}/response",
-            json=event.payload,
+            json={
+                "event_id": str(event.event_id),
+                "conversation_id": str(event.conversation_id) if event.conversation_id else None,
+                **event.payload,
+            },
             timeout=10.0,
         )
         resp.raise_for_status()
@@ -55,7 +67,10 @@ async def push_alert_to_surface(event: CLIVEEvent) -> None:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{TELEGRAM_URL}/alert",
-            json=event.payload,
+            json={
+                "event_id": str(event.event_id),
+                **event.payload,
+            },
             timeout=10.0,
         )
         resp.raise_for_status()

@@ -157,17 +157,26 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
     D-025: idempotent — duplicate event_id not re-rendered.
     v0.3: stores last_retrieval for Block 18 /bad command.
 
-    Attempts Markdown rendering first. Falls back to plain text if Telegram
-    rejects the message (unbalanced * _ [ from LLM output). Both outcomes
-    are logged so silent drops are visible in container logs.
+    Idempotency guard: only applies when event_id is non-empty. An empty
+    event_id (caused by push_response_to_surface omitting it from the
+    payload) must not be added to _rendered_event_ids — it would block
+    every subsequent response for the lifetime of the process.
+
+    Delivery: tries Markdown first, falls back to plain text on parse
+    failure, retries once on NetworkError before logging a hard failure.
     """
+    import asyncio as _asyncio  # noqa: PLC0415
+
     event_id = response_payload.get("event_id", "")
 
-    if event_id in _rendered_event_ids:
-        log.info("idempotency_skip_render", event_id=event_id)
-        return
-
-    _rendered_event_ids.add(event_id)
+    if event_id:
+        if event_id in _rendered_event_ids:
+            log.info("idempotency_skip_render", event_id=event_id)
+            return
+        _rendered_event_ids.add(event_id)
+    else:
+        # event_id missing from payload — log and continue without idempotency
+        log.warning("response_missing_event_id", chat_id=chat_id)
 
     response_text = response_payload.get("response_text", "")
     confidence = response_payload.get("confidence", {})
@@ -189,33 +198,46 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
         log.warning("response_drop_no_app", event_id=event_id)
         return
 
-    # Try Markdown first; fall back to plain text on parse failure.
-    # LLM responses may contain characters that break Telegram Markdown
-    # (unbalanced *, _, [). Failure here was previously a silent drop.
-    try:
-        await _app.bot.send_message(
-            chat_id=chat_id,
-            text=response_text,
-            parse_mode="Markdown",
-        )
-        log.info("response_delivered", event_id=event_id, chat_id=chat_id)
-    except Exception as exc:
-        log.warning(
-            "response_markdown_failed_retrying_plain",
-            event_id=event_id,
-            chat_id=chat_id,
-            exc=str(exc),
-        )
-        try:
-            await _app.bot.send_message(chat_id=chat_id, text=response_text)
-            log.info("response_delivered_plain", event_id=event_id, chat_id=chat_id)
-        except Exception as exc2:
-            log.error(
-                "response_delivery_failed",
-                event_id=event_id,
-                chat_id=chat_id,
-                exc=str(exc2),
-            )
+    async def _send(parse_mode: str | None = "Markdown") -> None:
+        kwargs: dict = {"chat_id": chat_id, "text": response_text}
+        if parse_mode:
+            kwargs["parse_mode"] = parse_mode
+        await _app.bot.send_message(**kwargs)  # type: ignore[union-attr]
+
+    # Attempt 1: Markdown
+    # Attempt 2 (on parse failure): plain text
+    # Each attempt retries once on NetworkError with a 3s pause
+    for parse_mode in ("Markdown", None):
+        for network_attempt in range(2):
+            try:
+                await _send(parse_mode)
+                label = "response_delivered" if parse_mode else "response_delivered_plain"
+                log.info(label, event_id=event_id, chat_id=chat_id)
+                return
+            except Exception as exc:
+                exc_str = str(exc)
+                is_network = "NetworkError" in type(exc).__name__ or "NetworkError" in exc_str
+                if is_network and network_attempt == 0:
+                    log.warning(
+                        "response_network_error_retrying",
+                        event_id=event_id,
+                        chat_id=chat_id,
+                        attempt=network_attempt + 1,
+                        exc=exc_str,
+                    )
+                    await _asyncio.sleep(3)
+                    continue
+                # Non-network error, or second network failure: break to next parse_mode
+                log.warning(
+                    "response_send_failed",
+                    event_id=event_id,
+                    chat_id=chat_id,
+                    parse_mode=parse_mode,
+                    exc=exc_str,
+                )
+                break
+
+    log.error("response_delivery_failed_all_attempts", event_id=event_id, chat_id=chat_id)
 
 
 async def deliver_alert(alert_payload: dict[str, Any], chat_id: int) -> None:

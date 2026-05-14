@@ -72,6 +72,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Write secrets file
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_CHAT_ID: ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+          AUDIT_WRITER_PASSWORD: ${{ secrets.AUDIT_WRITER_PASSWORD }}
+          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+        run: |
+          {
+            echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
+            echo "TELEGRAM_OWNER_CHAT_ID=${TELEGRAM_OWNER_CHAT_ID}"
+            echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+            echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            echo "POSTGRES_USER=clive_app"
+            echo "POSTGRES_DB=clive"
+            echo "APP_DB_PASSWORD=${APP_DB_PASSWORD}"
+            echo "AUDIT_WRITER_PASSWORD=${AUDIT_WRITER_PASSWORD}"
+            echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}"
+            echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
+            echo "MINIO_ENDPOINT=http://minio:9000"
+          } > /etc/clive/secrets.env
+          chmod 600 /etc/clive/secrets.env
+
       - name: Wait for PostgreSQL to be ready
         run: |
           for i in $(seq 1 12); do

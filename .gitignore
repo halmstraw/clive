@@ -16,6 +16,9 @@ infrastructure/compose/.env
 # CLIVE runtime secrets
 /etc/clive/
 
+# Local information
+personalDevNotes.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -26,6 +29,10 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# E2E test sessions (never commit)
+tests/e2e/*.session
+tests/e2e/.env
 
 # Editor
 .DS_Store

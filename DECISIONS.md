@@ -4,8 +4,8 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-103
-Last updated: 2026-05-13
+Last decision ID: D-104
+Last updated: 2026-05-14
 
 | ID | Title | Status | Date | Blocks | File |
 |----|-------|--------|------|--------|------|
@@ -112,3 +112,4 @@ Last updated: 2026-05-13
 | D-101 | Telegram /ingest uses caption command pattern | Accepted | 2026-05-09 | Block 23, Block 14 | [D-101-telegram-ingest-caption-command.md](docs/decisions/D-101-telegram-ingest-caption-command.md) |
 | D-102 | Decisions migrated from Notion to local ADR files | Accepted | 2026-05-13 | Block 29 | [D-102-decisions-to-local-adr-files.md](docs/decisions/D-102-decisions-to-local-adr-files.md) |
 | D-103 | CLIVE v0.2 acceptance criteria defined | Accepted | 2026-05-13 | All blocks | [D-103-v02-acceptance-criteria.md](docs/decisions/D-103-v02-acceptance-criteria.md) |
+| D-104 | CLIVE v0.2 signed off; all six criteria met 14 May 2026 | Accepted | 2026-05-14 | All blocks | [D-104-v02-signed-off.md](docs/decisions/D-104-v02-signed-off.md) |

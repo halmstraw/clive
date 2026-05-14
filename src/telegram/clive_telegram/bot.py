@@ -156,6 +156,10 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
     Called by the HTTP endpoint that Block 13 pushes responses to.
     D-025: idempotent — duplicate event_id not re-rendered.
     v0.3: stores last_retrieval for Block 18 /bad command.
+
+    Attempts Markdown rendering first. Falls back to plain text if Telegram
+    rejects the message (unbalanced * _ [ from LLM output). Both outcomes
+    are logged so silent drops are visible in container logs.
     """
     event_id = response_payload.get("event_id", "")
 
@@ -170,7 +174,6 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
     chunk_ids = response_payload.get("chunk_ids", [])
 
     # Store last retrieval context for Block 18 (v0.3)
-    # Only update if there was an actual retrieval (chunk_ids present)
     conversation_id = response_payload.get("conversation_id")
     _last_retrieval[chat_id] = {
         "event_id": event_id,
@@ -180,15 +183,39 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
 
     # Append low-confidence indicator if retrieval was poor (D-047)
     if not confidence.get("threshold_met", True) and confidence.get("chunks_returned", 1) == 0:
-        response_text += "\n\n⚠️ _(Answered from general knowledge — no relevant documents found)_"
+        response_text += "\n\n⚠️ (Answered from general knowledge — no relevant documents found)"
 
-    if _app:
+    if not _app:
+        log.warning("response_drop_no_app", event_id=event_id)
+        return
+
+    # Try Markdown first; fall back to plain text on parse failure.
+    # LLM responses may contain characters that break Telegram Markdown
+    # (unbalanced *, _, [). Failure here was previously a silent drop.
+    try:
         await _app.bot.send_message(
             chat_id=chat_id,
             text=response_text,
             parse_mode="Markdown",
         )
         log.info("response_delivered", event_id=event_id, chat_id=chat_id)
+    except Exception as exc:
+        log.warning(
+            "response_markdown_failed_retrying_plain",
+            event_id=event_id,
+            chat_id=chat_id,
+            exc=str(exc),
+        )
+        try:
+            await _app.bot.send_message(chat_id=chat_id, text=response_text)
+            log.info("response_delivered_plain", event_id=event_id, chat_id=chat_id)
+        except Exception as exc2:
+            log.error(
+                "response_delivery_failed",
+                event_id=event_id,
+                chat_id=chat_id,
+                exc=str(exc2),
+            )
 
 
 async def deliver_alert(alert_payload: dict[str, Any], chat_id: int) -> None:
@@ -421,7 +448,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "source_key": document.file_name or "unknown",
                     "reason": "file_too_large",
                     "file_size": document.file_size,
-                    "chat_id": chat_id,
+                    "chat_id": chat_id,                  # D-103 criterion 6 provenance
                 },
             },
         )
@@ -469,7 +496,7 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "original_filename": original_name,
                 "file_size": document.file_size,
                 "content_type": content_type,
-                "chat_id": chat_id,
+                "chat_id": chat_id,                      # D-103 criterion 6 provenance
             },
         },
     )
@@ -711,16 +738,12 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
 
     text = (
         f"⚠️ {action_description}\n\n"
-        "Reply /confirm\\_delete to proceed or /cancel\\_delete to abort.\n"
-        "_(No response within 2 minutes cancels automatically.)_"
+        "Reply /confirm_delete to proceed or /cancel_delete to abort.\n"
+        "(No response within 2 minutes cancels automatically.)"
     )
 
     if _app:
-        await _app.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode="Markdown",
-        )
+        await _app.bot.send_message(chat_id=chat_id, text=text)
         log.info(
             "confirmation_prompt_sent",
             chat_id=chat_id,

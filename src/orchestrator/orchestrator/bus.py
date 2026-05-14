@@ -20,7 +20,7 @@ import structlog
 from . import alignment, audit
 from .events.schema import AlignmentResult, CLIVEEvent
 from .events.taxonomy import ALIGNMENT_REJECTED, DELIVERY_FAILED, SYSTEM_OVERRIDE_ACTIVE
-from .retry import with_retry
+from .retry import DELIVERY_FAILED as RETRY_FAILED, with_retry
 
 log = structlog.get_logger()
 
@@ -107,7 +107,12 @@ class EventBus:
             queue.task_done()
 
     async def _dispatch(self, event: CLIVEEvent) -> None:
-        """Dispatch event to all registered subscribers with retry."""
+        """Dispatch event to all registered subscribers with retry.
+
+        Uses RETRY_FAILED sentinel to distinguish exhausted-retries from
+        void-success (push functions return None on success, which must not
+        be treated as failure).
+        """
         subscribers = self._subscribers.get(event.event_type, [])
 
         for block_id, handler in subscribers:
@@ -116,8 +121,8 @@ class EventBus:
                 event_id=str(event.event_id),
                 subscriber_block=block_id,
             )
-            if result is None:
-                # Retry exhausted — dead-letter
+            if result is RETRY_FAILED:
+                # All retries exhausted — dead-letter
                 await self._emit_delivery_failed(event, block_id)
 
     async def _emit_rejection(self, event: CLIVEEvent, result: AlignmentResult) -> None:

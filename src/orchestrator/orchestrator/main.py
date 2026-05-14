@@ -19,6 +19,7 @@ from . import action, audit, retrieval
 from .bus import bus
 from .events.taxonomy import (
     ACTION_CONFIRMED,
+    ACTION_CONFIRMATION_REQUESTED,
     ACTION_OWNER_RESPONSE,
     ACTION_PENDING,
     ACTION_REJECTED,

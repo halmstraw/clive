@@ -119,11 +119,12 @@ jobs:
           done
 
       - name: Ensure MinIO raw store bucket exists
+        # Read credentials from the running MinIO container — these are always
+        # the credentials MinIO will accept, regardless of what is in secrets.env.
         run: |
-          MINIO_ROOT_USER=$(grep '^MINIO_ROOT_USER=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
-          MINIO_ROOT_PASSWORD=$(grep '^MINIO_ROOT_PASSWORD=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
-          RAW_BUCKET=$(grep '^MINIO_RAW_BUCKET=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r')
-          RAW_BUCKET=${RAW_BUCKET:-clive-raw-store}
+          MINIO_ROOT_USER=$(docker exec clive-minio printenv MINIO_ROOT_USER)
+          MINIO_ROOT_PASSWORD=$(docker exec clive-minio printenv MINIO_ROOT_PASSWORD)
+          RAW_BUCKET=${MINIO_RAW_BUCKET:-clive-raw-store}
           docker run --rm \
             --network container:clive-minio \
             -e MC_HOST_local="http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@localhost:9000" \

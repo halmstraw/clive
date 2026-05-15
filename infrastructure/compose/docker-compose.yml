@@ -199,8 +199,8 @@ services:
     restart: always
     volumes:
       - loki_data:/loki
-      - /home/clive/compose/observability/loki/config.yml:/etc/loki/config.yml:ro
-    command: -config.file=/etc/loki/config.yml
+      - /home/clive/compose/observability/loki:/etc/loki/conf:ro
+    command: -config.file=/etc/loki/conf/config.yml
     mem_limit: 512m
     networks:
       - clive-internal

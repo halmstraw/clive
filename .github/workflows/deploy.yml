@@ -209,7 +209,7 @@ jobs:
       - name: Deploy observability and Caddy services
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
-            up -d --no-recreate \
+            up -d --remove-orphans \
             caddy prometheus loki promtail grafana node-exporter postgres-exporter
 
   verify:

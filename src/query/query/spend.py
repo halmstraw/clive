@@ -117,4 +117,11 @@ async def record_usage(
             cost_usd=cost_usd,
         )
     except Exception as exc:
-        log.error("llm_usage_record_failed", error=str(exc))
+        log.error(
+            "llm_usage_record_failed",
+            error=str(exc),
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+        )

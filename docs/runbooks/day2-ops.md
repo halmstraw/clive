@@ -5,6 +5,7 @@
 
 Day-to-day operational reference for a running CLIVE instance.
 For initial setup see `docs/runbooks/bootstrap.md` and `docs/runbooks/terraform-bootstrap.md`.
+For observability (Grafana, Prometheus, Loki) see `docs/runbooks/observability.md`.
 
 ---
 
@@ -25,13 +26,22 @@ If the IP changes after a Terraform apply, update this file.
 docker ps
 ```
 
-All six containers should show `Up` and `healthy`:
+All 13 long-running containers should show `Up` and `healthy`:
 - `clive-orchestrator`
 - `clive-processing`
 - `clive-query`
 - `clive-telegram`
 - `clive-postgres`
 - `clive-minio`
+- `clive-prometheus`
+- `clive-loki`
+- `clive-promtail`
+- `clive-grafana`
+- `clive-node-exporter`
+- `clive-postgres-exporter`
+- `clive-cadvisor`
+
+`clive-seed` and `clive-backup` are one-shot containers and will not appear after they complete.
 
 ---
 

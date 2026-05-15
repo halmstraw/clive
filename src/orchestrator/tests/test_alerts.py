@@ -1,36 +1,52 @@
 """Tests for POST /alerts — Grafana webhook receiver (D-118, v0.5).
 
+Tests exercise handle_alerts directly, mocking request.json() and the
+bus singleton.  No HTTP server is required — consistent with the rest of
+this test suite (see test_action.py, test_retrieval.py).
+
 Covers:
 - Valid payload with one alert: emits one alert.triggered event, returns 200.
 - Malformed JSON: returns 400, no events emitted.
 - Empty alerts array: returns 200, no events emitted.
 - Missing 'alerts' field: returns 400, no events emitted.
 - Multiple alerts: one event emitted per alert.
-- Payload fields mapped correctly (alert_name, severity, status, summary,
-  description, started_at, fingerprint).
+- Missing severity label: defaults to 'unknown'.
+- Missing annotations.summary: falls back to top-level 'title'.
 """
 
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
 
-from orchestrator.events.schema import AlignmentResult, CLIVEEvent
+from orchestrator.events.schema import CLIVEEvent
 from orchestrator.events.taxonomy import ALERT_TRIGGERED
-from orchestrator.health import start_health_server
+from orchestrator.health import handle_alerts
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _make_request(body: dict | None, malformed: bool = False) -> MagicMock:
+    """Build a mock aiohttp Request whose .json() returns the given body.
+
+    Pass malformed=True to simulate a JSON decode error.
+    """
+    req = MagicMock()
+    if malformed:
+        req.json = AsyncMock(side_effect=json.JSONDecodeError("bad json", "", 0))
+    else:
+        req.json = AsyncMock(return_value=body)
+    return req
+
+
 def _grafana_payload(alerts: list[dict] | None = None, **overrides) -> dict:
     """Build a minimal Grafana-shaped webhook payload."""
-    base = {
+    base: dict = {
         "receiver": "clive-orchestrator",
         "status": "firing",
         "alerts": alerts if alerts is not None else [_grafana_alert()],
@@ -69,55 +85,22 @@ def _grafana_alert(
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-async def client(aiohttp_client):
-    """Spin up a real aiohttp test server with the health app.
-
-    We patch bus.publish and the alignment/audit dependencies so no DB or
-    bus infrastructure is needed.
-    """
-    app = web.Application()
-    from orchestrator.health import (
-        handle_alerts,
-        handle_event_intake,
-        handle_health,
-    )
-    app.router.add_get("/health", handle_health)
-    app.router.add_post("/events", handle_event_intake)
-    app.router.add_post("/alerts", handle_alerts)
-    return await aiohttp_client(app)
-
-
-# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_valid_payload_emits_alert_triggered_event(aiohttp_client):
+async def test_valid_payload_emits_alert_triggered_event():
     """Valid Grafana payload with one alert emits one alert.triggered event."""
     emitted: list[CLIVEEvent] = []
 
-    async def fake_publish(event: CLIVEEvent) -> None:
-        emitted.append(event)
-
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
+    req = _make_request(_grafana_payload())
 
     with patch("orchestrator.health.bus") as mock_bus:
-        mock_bus.publish = AsyncMock(side_effect=fake_publish)
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps(_grafana_payload()),
-            headers={"Content-Type": "application/json"},
-        )
+        mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
+        resp = await handle_alerts(req)
 
     assert resp.status == 200
-    body = await resp.json()
+    body = json.loads(resp.body)
     assert body["status"] == "accepted"
 
     assert len(emitted) == 1
@@ -134,130 +117,93 @@ async def test_valid_payload_emits_alert_triggered_event(aiohttp_client):
 
 
 @pytest.mark.asyncio
-async def test_malformed_json_returns_400(aiohttp_client):
+async def test_malformed_json_returns_400():
     """Malformed JSON body must return 400; no events emitted."""
     emitted: list[CLIVEEvent] = []
 
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
+    req = _make_request(None, malformed=True)
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data="this is not json {{{",
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 400
     assert len(emitted) == 0
 
 
 @pytest.mark.asyncio
-async def test_empty_alerts_array_returns_200_no_events(aiohttp_client):
+async def test_empty_alerts_array_returns_200_no_events():
     """Empty alerts list must return 200 but emit no events."""
     emitted: list[CLIVEEvent] = []
 
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
+    req = _make_request(_grafana_payload(alerts=[]))
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps(_grafana_payload(alerts=[])),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 200
-    body = await resp.json()
+    body = json.loads(resp.body)
     assert body["status"] == "accepted"
     assert len(emitted) == 0
 
 
 @pytest.mark.asyncio
-async def test_missing_alerts_field_returns_400(aiohttp_client):
+async def test_missing_alerts_field_returns_400():
     """Payload without 'alerts' key must return 400."""
     emitted: list[CLIVEEvent] = []
 
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
+    req = _make_request({"status": "firing", "receiver": "clive-orchestrator"})
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps({"status": "firing", "receiver": "clive-orchestrator"}),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 400
     assert len(emitted) == 0
 
 
 @pytest.mark.asyncio
-async def test_multiple_alerts_emit_one_event_each(aiohttp_client):
+async def test_multiple_alerts_emit_one_event_each():
     """Three alerts in one payload must produce three alert.triggered events."""
     emitted: list[CLIVEEvent] = []
-
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
 
     alerts = [
         _grafana_alert(alertname="ServiceDown", fingerprint="fp1"),
         _grafana_alert(alertname="HighMemory", severity="warning", fingerprint="fp2"),
         _grafana_alert(alertname="DiskFull", severity="critical", fingerprint="fp3"),
     ]
+    req = _make_request(_grafana_payload(alerts=alerts))
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps(_grafana_payload(alerts=alerts)),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 200
     assert len(emitted) == 3
-    fingerprints = [e.payload["fingerprint"] for e in emitted]
-    assert set(fingerprints) == {"fp1", "fp2", "fp3"}
+    fingerprints = {e.payload["fingerprint"] for e in emitted}
+    assert fingerprints == {"fp1", "fp2", "fp3"}
 
 
 @pytest.mark.asyncio
-async def test_missing_severity_defaults_to_unknown(aiohttp_client):
-    """Alert with no severity label must use 'unknown' as default."""
+async def test_missing_severity_defaults_to_unknown():
+    """Alert with no severity label must use 'unknown' as the default."""
     emitted: list[CLIVEEvent] = []
-
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
 
     alert_no_severity = {
         "status": "firing",
-        "labels": {"alertname": "NoSeverityAlert"},
+        "labels": {"alertname": "NoSeverityAlert"},  # no 'severity' key
         "annotations": {},
         "startsAt": "2026-05-15T10:00:00Z",
         "endsAt": "0001-01-01T00:00:00Z",
         "generatorURL": "",
         "fingerprint": "xyz999",
     }
+    req = _make_request(_grafana_payload(alerts=[alert_no_severity]))
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps(_grafana_payload(alerts=[alert_no_severity])),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 200
     assert len(emitted) == 1
@@ -266,19 +212,14 @@ async def test_missing_severity_defaults_to_unknown(aiohttp_client):
 
 
 @pytest.mark.asyncio
-async def test_summary_falls_back_to_title_when_annotation_absent(aiohttp_client):
-    """When annotations.summary is absent, payload.title is used as summary."""
+async def test_summary_falls_back_to_title_when_annotation_absent():
+    """When annotations.summary is absent, the top-level 'title' is used."""
     emitted: list[CLIVEEvent] = []
-
-    app = web.Application()
-    from orchestrator.health import handle_alerts
-    app.router.add_post("/alerts", handle_alerts)
-    client = await aiohttp_client(app)
 
     alert_no_summary = {
         "status": "firing",
         "labels": {"alertname": "TestAlert", "severity": "warning"},
-        "annotations": {},  # no summary
+        "annotations": {},  # no summary annotation
         "startsAt": "2026-05-15T10:00:00Z",
         "endsAt": "0001-01-01T00:00:00Z",
         "generatorURL": "",
@@ -286,14 +227,12 @@ async def test_summary_falls_back_to_title_when_annotation_absent(aiohttp_client
     }
     payload = _grafana_payload(alerts=[alert_no_summary])
     payload["title"] = "[FIRING:1] TestAlert"
+    req = _make_request(payload)
 
     with patch("orchestrator.health.bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=lambda e: emitted.append(e))
-        resp = await client.post(
-            "/alerts",
-            data=json.dumps(payload),
-            headers={"Content-Type": "application/json"},
-        )
+        resp = await handle_alerts(req)
 
     assert resp.status == 200
+    assert len(emitted) == 1
     assert emitted[0].payload["summary"] == "[FIRING:1] TestAlert"

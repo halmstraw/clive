@@ -153,7 +153,13 @@ jobs:
 
       - name: Sync observability configs to /home/clive/compose/observability
         run: |
-          # Ensure all directories exist
+          # Fix ownership of any dirs created as root (e.g. by a prior root docker run).
+          # clive has no sudo but can run docker — alpine as root can chown the tree.
+          docker run --rm \
+            -v /home/clive/compose:/target \
+            alpine chown -R "$(id -u):$(id -g)" /target
+
+          # Ensure config directories exist (now clive-owned, mkdir will succeed)
           mkdir -p \
             /home/clive/compose/observability/prometheus/rules \
             /home/clive/compose/observability/loki \
@@ -163,6 +169,7 @@ jobs:
             /home/clive/compose/observability/grafana/provisioning/alerting \
             /home/clive/compose/observability/grafana/dashboards \
             /home/clive/compose/observability/caddy
+
           # Remove any paths incorrectly created as directories by a prior Ansible run
           for f in \
             /home/clive/compose/observability/loki/config.yml \
@@ -171,6 +178,7 @@ jobs:
             /home/clive/compose/observability/caddy/Caddyfile; do
             [ -d "$f" ] && rm -rf "$f" || true
           done
+
           cp infrastructure/observability/prometheus/prometheus.yml \
             /home/clive/compose/observability/prometheus/
           cp infrastructure/observability/prometheus/rules/services.yml \

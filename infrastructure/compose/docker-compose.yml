@@ -170,9 +170,123 @@ services:
     networks:
       - clive-internal
 
+  # ---------------------------------------------------------------------------
+  # Block 25 — Observability stack (Phase 1)
+  # D-117: Prometheus + Loki + Grafana + supporting exporters
+  # D-118: Grafana alerts route to orchestrator webhook, not directly to Telegram
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clive-prometheus
+    restart: always
+    volumes:
+      - prometheus_data:/prometheus
+      - /home/clive/compose/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /home/clive/compose/observability/prometheus/rules:/etc/prometheus/rules:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    mem_limit: 200m
+    networks:
+      - clive-internal
+
+  loki:
+    image: grafana/loki:latest
+    container_name: clive-loki
+    restart: always
+    volumes:
+      - loki_data:/loki
+      - /home/clive/compose/observability/loki/config.yml:/etc/loki/config.yml:ro
+    command: -config.file=/etc/loki/config.yml
+    mem_limit: 400m
+    networks:
+      - clive-internal
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: clive-promtail
+    restart: always
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /home/clive/compose/observability/promtail/config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    mem_limit: 100m
+    networks:
+      - clive-internal
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clive-grafana
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /home/clive/compose/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - /home/clive/compose/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_HTTP_ADDR=127.0.0.1
+    mem_limit: 200m
+    networks:
+      - clive-internal
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: clive-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    network_mode: host
+    # node-exporter uses host network for accurate system metrics.
+    # It must NOT be added to clive-internal as well — Docker does not allow both.
+    mem_limit: 50m
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: clive-postgres-exporter
+    restart: always
+    env_file: /etc/clive/secrets.env
+    environment:
+      - DATA_SOURCE_NAME=postgresql://clive_app:${APP_DB_PASSWORD}@postgres:5432/clive?sslmode=disable
+    mem_limit: 50m
+    networks:
+      - clive-internal
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: clive-cadvisor
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    mem_limit: 150m
+    networks:
+      - clive-internal
+
 volumes:
   postgres_data:
   minio_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
 
 networks:
   clive-internal:

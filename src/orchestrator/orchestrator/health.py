@@ -3,14 +3,20 @@
 v0.3: added /retrieve/document-by-filename for T8 deletion lookup (D-109).
 v0.4: added /retrieve/document-list (/list command) and /retrieve/status
       (/status command); both route through orchestrator per D-003/D-043.
+v0.5: added /alerts — Grafana webhook receiver; emits alert.triggered events
+      on the internal bus per D-003/D-118.
 """
 
 from __future__ import annotations
 
+import json
+
+import structlog
 from aiohttp import web
 
 from .bus import bus
 from .events.schema import CLIVEEvent
+from .events.taxonomy import ALERT_TRIGGERED
 from .retrieval import (
     retrieve,
     retrieve_document_by_filename,
@@ -18,6 +24,8 @@ from .retrieval import (
     retrieve_status,
     retrieve_system_document,
 )
+
+log = structlog.get_logger()
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
@@ -29,6 +37,69 @@ async def handle_event_intake(request: web.Request) -> web.Response:
     data = await request.json()
     event = CLIVEEvent(**data)
     await bus.publish(event)
+    return web.json_response({"status": "accepted"})
+
+
+async def handle_alerts(request: web.Request) -> web.Response:
+    """Receive Grafana webhook payloads and emit alert.triggered events (D-118).
+
+    POST /alerts — internal endpoint on clive-internal network only.
+    No authentication required (network-level isolation).
+
+    Grafana sends a batch payload with an 'alerts' list.  One alert.triggered
+    event is emitted per alert entry.  Returns 200 on success or empty batch.
+    Returns 400 for malformed JSON or missing 'alerts' field.
+    Never returns 5xx — Grafana would retry indefinitely.
+    """
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, Exception):
+        log.warning("alerts_malformed_json")
+        return web.json_response({"error": "invalid JSON"}, status=400)
+
+    if not isinstance(body, dict) or "alerts" not in body:
+        log.warning("alerts_missing_field", body_keys=list(body.keys()) if isinstance(body, dict) else None)
+        return web.json_response({"error": "missing 'alerts' field"}, status=400)
+
+    alerts = body["alerts"]
+    if not isinstance(alerts, list):
+        log.warning("alerts_field_not_list")
+        return web.json_response({"error": "'alerts' must be a list"}, status=400)
+
+    for alert in alerts:
+        labels = alert.get("labels", {})
+        annotations = alert.get("annotations", {})
+
+        alert_name = labels.get("alertname", "unknown")
+        severity = labels.get("severity", "unknown")
+        status = alert.get("status", "unknown")
+        summary = annotations.get("summary") or body.get("title", "")
+        description = annotations.get("description") or body.get("message", "")
+        started_at = alert.get("startsAt", "")
+        fingerprint = alert.get("fingerprint", "")
+
+        log.info(
+            "alert_received",
+            alert_name=alert_name,
+            severity=severity,
+            status=status,
+        )
+
+        event = CLIVEEvent(
+            event_type=ALERT_TRIGGERED,
+            source_block=25,
+            payload={
+                "alert_name": alert_name,
+                "severity": severity,
+                "status": status,
+                "summary": summary,
+                "description": description,
+                "started_at": started_at,
+                "fingerprint": fingerprint,
+            },
+        )
+        await bus.publish(event)
+
     return web.json_response({"status": "accepted"})
 
 
@@ -103,6 +174,7 @@ async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.Ap
     app = web.Application()
     app.router.add_get("/health", handle_health)
     app.router.add_post("/events", handle_event_intake)
+    app.router.add_post("/alerts", handle_alerts)
     app.router.add_post("/retrieve/knowledge", handle_retrieve_knowledge)
     app.router.add_post("/retrieve/system-document", handle_retrieve_system_document)
     app.router.add_post("/retrieve/document-by-filename", handle_retrieve_document_by_filename)

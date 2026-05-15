@@ -1,0 +1,41 @@
+groups:
+  - name: clive_services
+    rules:
+
+      # Any CLIVE application service is down for more than 2 minutes
+      - alert: CliveServiceDown
+        expr: up{job=~"orchestrator|query|telegram|processing"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CLIVE service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been unreachable for more than 2 minutes."
+
+      # High HTTP error rate — placeholder pending Phase 2 /metrics endpoints
+      # This rule will fire once services expose http_requests_total with a status label.
+      # Threshold: more than 5% of requests are 5xx over a 5-minute window.
+      - alert: CliveHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job=~"orchestrator|query|telegram|processing",status=~"5.."}[5m])) by (job)
+            /
+            sum(rate(http_requests_total{job=~"orchestrator|query|telegram|processing"}[5m])) by (job)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate on {{ $labels.job }}"
+          description: "More than 5% of requests to {{ $labels.job }} are returning 5xx errors over the last 5 minutes. (placeholder — requires Phase 2 /metrics endpoints)"
+
+      # Container restart loop — more than 3 restarts in 15 minutes
+      - alert: ContainerRestartLoop
+        expr: |
+          increase(container_start_time_seconds{name=~"clive-.*"}[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} has restarted more than 3 times in the last 15 minutes."

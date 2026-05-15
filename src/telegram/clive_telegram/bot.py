@@ -1116,13 +1116,13 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     total = result.get("total", len(documents))
-    lines = [f"*Knowledge base* — {total} document(s):\n"]
+    lines = [f"Knowledge base — {total} document(s):\n"]
     for i, doc in enumerate(documents, 1):
         date = doc["ingested_at"][:10]  # YYYY-MM-DD
         chunks = doc["chunk_count"]
         lines.append(f"{i}. {doc['filename']} — {chunks} chunk(s) — {date}")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines))
     log.info("list_delivered", chat_id=chat_id, doc_count=total)
 
 
@@ -1159,7 +1159,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     last_doc_at = result.get("last_doc_at")
     last_query_at = result.get("last_query_at")
 
-    lines = ["*CLIVE Status*\n"]
+    lines = ["CLIVE Status\n"]
 
     if doc_count == 0:
         lines.append("Knowledge base: empty")
@@ -1176,5 +1176,5 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     lines.append("\n/list — see all documents")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await update.message.reply_text("\n".join(lines))
     log.info("status_delivered", chat_id=chat_id, doc_count=doc_count)

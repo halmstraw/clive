@@ -39,6 +39,93 @@
     - 06_chunks_ingestion_columns.sql
     - 07_v03_tables.sql
 
+- name: Create observability config directories on VM
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: clive
+    group: clive
+    mode: "0755"
+  loop:
+    - /home/clive/compose/observability
+    - /home/clive/compose/observability/prometheus
+    - /home/clive/compose/observability/prometheus/rules
+    - /home/clive/compose/observability/loki
+    - /home/clive/compose/observability/promtail
+    - /home/clive/compose/observability/grafana
+    - /home/clive/compose/observability/grafana/provisioning
+    - /home/clive/compose/observability/grafana/provisioning/datasources
+    - /home/clive/compose/observability/grafana/provisioning/dashboards
+    - /home/clive/compose/observability/grafana/provisioning/alerting
+    - /home/clive/compose/observability/grafana/dashboards
+
+- name: Copy Prometheus config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/prometheus/prometheus.yml"
+    dest: /home/clive/compose/observability/prometheus/prometheus.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Prometheus alert rules
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/prometheus/rules/{{ item }}"
+    dest: /home/clive/compose/observability/prometheus/rules/
+    owner: clive
+    group: clive
+    mode: "0644"
+  loop:
+    - services.yml
+    - system.yml
+
+- name: Copy Loki config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/loki/config.yml"
+    dest: /home/clive/compose/observability/loki/config.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Promtail config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/promtail/config.yml"
+    dest: /home/clive/compose/observability/promtail/config.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Grafana provisioning — datasources
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/grafana/provisioning/datasources/datasources.yml"
+    dest: /home/clive/compose/observability/grafana/provisioning/datasources/datasources.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Grafana provisioning — dashboard provider
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/grafana/provisioning/dashboards/dashboards.yml"
+    dest: /home/clive/compose/observability/grafana/provisioning/dashboards/dashboards.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Grafana provisioning — alerting contact points
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/grafana/provisioning/alerting/contact_points.yml"
+    dest: /home/clive/compose/observability/grafana/provisioning/alerting/contact_points.yml
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Grafana dashboards
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/grafana/dashboards/system_overview.json"
+    dest: /home/clive/compose/observability/grafana/dashboards/system_overview.json
+    owner: clive
+    group: clive
+    mode: "0644"
+
 - name: Start Compose stack
   ansible.builtin.command:
     cmd: docker compose -f /home/clive/compose/docker-compose.yml up -d postgres minio

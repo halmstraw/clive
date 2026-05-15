@@ -1,25 +1,25 @@
 # CLIVE Observability Runbook
 
 **Owner:** Block 29 (Documentation)
-**Decisions:** D-117, D-118
+**Decisions:** D-117, D-118, D-121
 
-The observability stack collects metrics from every service and the host VM, aggregates all container logs, evaluates alert rules, and routes firing alerts through the orchestrator webhook into Block 13's event bus, which delivers them to the owner's Telegram chat. Grafana is not publicly reachable — all access is via SSH tunnel.
+The observability stack collects metrics from every service and the host VM, aggregates all container logs, evaluates alert rules, and routes firing alerts through the orchestrator webhook into Block 13's event bus, which delivers them to the owner's Telegram chat. Grafana is publicly accessible at `https://grafana.halmshaw.co.uk` via Caddy reverse proxy with Google OAuth authentication (D-121).
 
 ---
 
 ## Accessing Grafana
 
-For SSH access to the VM see `docs/runbooks/day2-ops.md`.
+Open `https://grafana.halmshaw.co.uk` in a browser and sign in with Google. Only accounts with a `gmail.com` domain are permitted (`GF_AUTH_GOOGLE_ALLOWED_DOMAINS=gmail.com`). Self-registration is disabled.
 
-Open an SSH tunnel to Grafana:
+**DNS prerequisite:** An A record for `grafana.halmshaw.co.uk` must point to `138.199.149.201` before the TLS certificate can be issued by Caddy. If the cert is not yet provisioned, Caddy will attempt ACME challenge on port 80 automatically — no manual step required once DNS resolves.
+
+**Fallback — admin username/password:** The local Grafana admin account remains active. If Google OAuth is not yet configured or is unavailable, use the SSH tunnel method:
 
 ```bash
 ssh -i ~/.ssh/clive_vm -L 3000:127.0.0.1:3000 root@138.199.149.201 -N
 ```
 
-Then open `http://localhost:3000` in a browser.
-
-**Login:** username `admin`, password is `GRAFANA_ADMIN_PASSWORD` from `/etc/clive/secrets.env`.
+Then open `http://localhost:3000` in a browser. Login with username `admin` and the `GRAFANA_ADMIN_PASSWORD` from `/etc/clive/secrets.env`.
 
 To retrieve the password from the VM:
 
@@ -27,6 +27,34 @@ To retrieve the password from the VM:
 ssh -i ~/.ssh/clive_vm root@138.199.149.201 \
   "grep '^GRAFANA_ADMIN_PASSWORD=' /etc/clive/secrets.env | cut -d= -f2 | tr -d '\r'"
 ```
+
+---
+
+## Google OAuth Setup (one-time owner step)
+
+This must be completed before Google OAuth login works at `grafana.halmshaw.co.uk`.
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create a new OAuth 2.0 Client ID (type: Web application).
+2. Set the authorised redirect URI to: `https://grafana.halmshaw.co.uk/login/google`
+3. Copy the Client ID and Client Secret.
+4. SSH into the VM and add the secrets to `/etc/clive/secrets.env`:
+
+   ```bash
+   ssh -i ~/.ssh/clive_vm root@138.199.149.201
+   # Edit /etc/clive/secrets.env and add:
+   # GOOGLE_CLIENT_ID=<your-client-id>
+   # GOOGLE_CLIENT_SECRET=<your-client-secret>
+   ```
+
+   Or re-run the Ansible playbook with the values set in vault/vars.
+
+5. Restart Grafana to pick up the new env vars:
+
+   ```bash
+   docker compose -f /home/clive/compose/docker-compose.yml restart grafana
+   ```
+
+6. Test login at `https://grafana.halmshaw.co.uk`.
 
 ---
 
@@ -148,6 +176,7 @@ Expected containers:
 | `clive-loki` | Block 25 — Log aggregation |
 | `clive-promtail` | Block 25 — Log shipper |
 | `clive-grafana` | Block 25 — Dashboards and alert dispatch |
+| `clive-caddy` | Block 25 — Reverse proxy and TLS termination (D-121) |
 | `clive-node-exporter` | Block 25 — VM host metrics |
 | `clive-postgres-exporter` | Block 25 — PostgreSQL metrics |
 | `clive-cadvisor` | Block 25 — Per-container metrics |
@@ -164,6 +193,7 @@ Expected containers:
 docker ps -a --filter "name=clive-prometheus"
 docker ps -a --filter "name=clive-loki"
 docker ps -a --filter "name=clive-grafana"
+docker ps -a --filter "name=clive-caddy"
 ```
 
 Check why a container exited:
@@ -171,6 +201,7 @@ Check why a container exited:
 ```bash
 docker logs clive-prometheus --tail 50
 docker logs clive-loki --tail 50
+docker logs clive-caddy --tail 50
 ```
 
 **Restart an observability container:**
@@ -180,7 +211,22 @@ docker restart clive-prometheus
 docker restart clive-loki
 docker restart clive-promtail
 docker restart clive-grafana
+docker restart clive-caddy
 ```
+
+**TLS certificate not issued:**
+
+Caddy issues certs automatically on first request. If the cert is not present:
+
+1. Confirm the DNS A record for `grafana.halmshaw.co.uk` resolves to `138.199.149.201`.
+2. Confirm ports 80 and 443 are open in the Hetzner firewall (`terraform apply` may be needed).
+3. Check Caddy logs: `docker logs clive-caddy --tail 100`
+
+**Google OAuth login failing:**
+
+1. Confirm `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are present in `/etc/clive/secrets.env`.
+2. Confirm the authorised redirect URI in Google Cloud Console includes `https://grafana.halmshaw.co.uk/login/google`.
+3. Restart Grafana: `docker compose -f /home/clive/compose/docker-compose.yml restart grafana`
 
 **Check Prometheus scrape targets:**
 

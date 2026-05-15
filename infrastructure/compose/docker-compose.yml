@@ -222,8 +222,6 @@ services:
     image: grafana/grafana:latest
     container_name: clive-grafana
     restart: always
-    ports:
-      - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - /home/clive/compose/observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -231,10 +229,45 @@ services:
     env_file: /etc/clive/secrets.env
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
-      - GF_SERVER_HTTP_ADDR=127.0.0.1
+      - GF_SERVER_HTTP_ADDR=0.0.0.0
+      - GF_SERVER_ROOT_URL=https://grafana.halmshaw.co.uk
+      - GF_SERVER_DOMAIN=grafana.halmshaw.co.uk
+      - GF_AUTH_GOOGLE_ENABLED=true
+      - GF_AUTH_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GF_AUTH_GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GF_AUTH_GOOGLE_SCOPES=https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email
+      - GF_AUTH_GOOGLE_AUTH_URL=https://accounts.google.com/o/oauth2/auth
+      - GF_AUTH_GOOGLE_TOKEN_URL=https://oauth2.googleapis.com/token
+      - GF_AUTH_GOOGLE_ALLOWED_DOMAINS=gmail.com
+      - GF_AUTH_GOOGLE_ALLOW_SIGN_UP=false
     mem_limit: 200m
     networks:
       - clive-internal
+
+  # ---------------------------------------------------------------------------
+  # D-121: Caddy reverse proxy — public HTTPS access to Grafana
+  # Caddy handles TLS automatically via Let's Encrypt.
+  # Ports 80 and 443 must be open in the Hetzner firewall (see terraform/main.tf).
+  # ---------------------------------------------------------------------------
+
+  caddy:
+    image: caddy:latest
+    container_name: clive-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - /home/clive/compose/observability/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - clive-internal
+    deploy:
+      resources:
+        limits:
+          memory: 64m
 
   node-exporter:
     image: prom/node-exporter:latest
@@ -288,6 +321,8 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   clive-internal:

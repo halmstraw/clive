@@ -36,8 +36,8 @@ resource "hcloud_ssh_key" "clive_owner" {
   public_key = var.ssh_public_key
 }
 
-# Firewall — inbound SSH from owner IP only; all other inbound blocked
-# Telegram bot uses outbound HTTPS only — no inbound rules needed
+# Firewall — inbound SSH from owner IP only; HTTP/HTTPS from anywhere for Caddy
+# Telegram bot uses outbound HTTPS only — no inbound rules needed for that
 resource "hcloud_firewall" "clive" {
   name = "clive-v01"
 
@@ -46,6 +46,22 @@ resource "hcloud_firewall" "clive" {
     protocol   = "tcp"
     port       = "22"
     source_ips = ["${var.owner_ip}/32"]
+  }
+
+  # D-121: HTTP — required for Caddy ACME challenge and HTTP→HTTPS redirect
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "80"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+
+  # D-121: HTTPS — public access to Grafana via Caddy reverse proxy
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "443"
+    source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   rule {

@@ -19,4 +19,6 @@
       MINIO_ROOT_PASSWORD={{ minio_root_password }}
       MINIO_ENDPOINT=http://minio:9000
       GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
+      GOOGLE_CLIENT_ID={{ google_client_id }}
+      GOOGLE_CLIENT_SECRET={{ google_client_secret }}
   no_log: true

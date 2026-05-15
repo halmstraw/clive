@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-120
+Last decision ID: D-121
 Last updated: 2026-05-15
 
 | ID | Title | Status | Date | Blocks | File |
@@ -129,3 +129,4 @@ Last updated: 2026-05-15
 | D-118 | Block 25 alert routing via orchestrator webhook — D-003 compliant | Accepted | 2026-05-15 | Block 25, Block 13, Block 4, Block 23 | [D-118-block25-alert-routing-via-orchestrator.md](docs/decisions/D-118-block25-alert-routing-via-orchestrator.md) |
 | D-119 | Telegram /help command — lists all available commands and usage | Accepted | 2026-05-15 | Block 23, Block 3 | [D-119-telegram-help-command.md](docs/decisions/D-119-telegram-help-command.md) |
 | D-120 | CLIVE v0.4 signed off — all seven criteria met 15 May 2026 | Accepted | 2026-05-15 | All blocks | [D-120-v04-signed-off.md](docs/decisions/D-120-v04-signed-off.md) |
+| D-121 | Grafana exposed publicly via Caddy reverse proxy at grafana.halmshaw.co.uk | Accepted | 2026-05-15 | Block 25, Block 27 | [D-121-grafana-public-access-caddy.md](docs/decisions/D-121-grafana-public-access-caddy.md) |

@@ -34,6 +34,12 @@ provider "hcloud" {
 resource "hcloud_ssh_key" "clive_owner" {
   name       = "clive-owner"
   public_key = var.ssh_public_key
+
+  lifecycle {
+    # Key was provisioned once. Prevent accidental destruction if the GHA
+    # secret is misconfigured or rotated without a matching state update.
+    ignore_changes = [public_key]
+  }
 }
 
 # Firewall — inbound SSH from owner IP only; HTTP/HTTPS from anywhere for Caddy

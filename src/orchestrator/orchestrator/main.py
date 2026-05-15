@@ -5,6 +5,7 @@ Registers push subscribers for Block 8, Block 9, Block 15, and Block 23.
 Runs until interrupted.
 
 v0.3: Block 9 (Action Layer) added — wires action event lifecycle.
+v0.6: cost.cap_exceeded subscriber added (D-125, Block 20).
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from .events.taxonomy import (
     ACTION_PENDING,
     ACTION_REJECTED,
     ALERT_TRIGGERED,
+    COST_CAP_EXCEEDED,
     DELETION_COMPLETE,
     DELETION_NOT_FOUND,
     INGEST_PROCESSED,
@@ -38,6 +40,7 @@ from .push import (
     push_alert_to_surface,
     push_confirmed_to_deletion,
     push_confirmation_to_surface,
+    push_cost_cap_notification_to_surface,
     push_deletion_result_to_surface,
     push_ingest_status_to_surface,
     push_ingest_to_block15,
@@ -82,6 +85,10 @@ async def main() -> None:
     # deletion results → Block 23
     bus.subscribe(DELETION_COMPLETE, block_id=23, handler=push_deletion_result_to_surface)
     bus.subscribe(DELETION_NOT_FOUND, block_id=23, handler=push_deletion_result_to_surface)
+
+    # Block 20 — Cost cap notification (v0.6, D-125)
+    # cost.cap_exceeded emitted by Block 8 → owner alert via Block 23
+    bus.subscribe(COST_CAP_EXCEEDED, block_id=23, handler=push_cost_cap_notification_to_surface)
 
     # Start health + API server
     runner = await start_health_server()

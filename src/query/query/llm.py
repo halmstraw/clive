@@ -8,6 +8,9 @@ Examples:
   anthropic/claude-sonnet-4-20250514   (default)
   openai/gpt-4o
   anthropic/claude-opus-4-5
+
+v0.6: complete() now returns (response_text, usage_data) so the handler
+can record token counts and cost to clive_state.llm_usage (D-125).
 """
 
 from __future__ import annotations
@@ -33,8 +36,11 @@ async def complete(
     conversation_history: list[dict[str, str]],
     retrieved_chunks: list[dict[str, Any]],
     user_query: str,
-) -> str:
-    """Call LLM with assembled context. Returns response text.
+) -> tuple[str, dict[str, Any]]:
+    """Call LLM with assembled context.
+
+    Returns (response_text, usage_data) where usage_data contains:
+      model, prompt_tokens, completion_tokens
 
     Context structure (D-044 priority order):
       System prompt = personality (Tier 1) + alignment rules (Tier 2)
@@ -73,5 +79,24 @@ async def complete(
     )
 
     text = response.choices[0].message.content
-    log.info("llm_call_complete", model=model, response_chars=len(text))
-    return text
+
+    # Extract token usage from LiteLLM response object
+    usage = getattr(response, "usage", None)
+    prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+    completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+
+    usage_data: dict[str, Any] = {
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+    }
+
+    log.info(
+        "llm_call_complete",
+        model=model,
+        response_chars=len(text),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
+
+    return text, usage_data

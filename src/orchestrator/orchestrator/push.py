@@ -12,6 +12,9 @@ v0.4 (D-115): push_query_to_block8 fetches conversation history from DB and
 injects it into the payload; stores user turn after successful push.
 push_response_to_surface stores the assistant turn after successful push.
 Failures are logged and non-fatal — query proceeds without history.
+
+v0.6 (D-125): push_cost_cap_notification_to_surface added — routes
+cost.cap_exceeded event to Block 23 as an owner alert (D-003 compliant).
 """
 
 from __future__ import annotations
@@ -217,6 +220,39 @@ async def push_deletion_result_to_surface(event: CLIVEEvent) -> None:
                 "event_id": str(event.event_id),
                 "conversation_id": str(event.conversation_id) if event.conversation_id else None,
                 **event.payload,
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
+
+# ---------------------------------------------------------------------------
+# Block 20 — Cost cap notification (v0.6, D-125)
+# ---------------------------------------------------------------------------
+
+async def push_cost_cap_notification_to_surface(event: CLIVEEvent) -> None:
+    """Push cost.cap_exceeded notification to Block 23 as an owner alert.
+
+    D-003: Block 8 emits cost.cap_exceeded to Block 13 via HTTP.
+    Block 13 routes here. Block 23 receives it via the /alert endpoint.
+    No direct Block 8 → Block 23 communication.
+    """
+    today_spend = event.payload.get("today_spend_usd", 0.0)
+    cap = event.payload.get("cap_usd", 0.0)
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{TELEGRAM_URL}/alert",
+            json={
+                "event_id": str(event.event_id),
+                "severity": "warn",
+                "title": "Daily spend cap reached",
+                "body": (
+                    f"Daily LLM spend cap of ${cap:.4f} reached "
+                    f"(today: ${today_spend:.4f}). "
+                    "CLIVE will not make further LLM calls today. "
+                    "Cap resets at midnight UTC."
+                ),
             },
             timeout=10.0,
         )

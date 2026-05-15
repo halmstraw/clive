@@ -10,6 +10,12 @@ returned in this retrieval). Block 18 (Feedback) uses this to tag the
 specific chunks that were poor quality.
 
 v0.5: prometheus_client instrumentation added (D-122 Phase 2).
+
+v0.6: Block 20 spend cap gate and LLM usage recording (D-125).
+  - Before each LLM call: check today's spend against DAILY_SPEND_CAP_USD.
+  - If cap exceeded: return canned response, emit cost.cap_exceeded, no LLM call.
+  - After each LLM call: record model/tokens/cost to clive_state.llm_usage.
+  - Prometheus: increment clive_llm_tokens_total and clive_llm_cost_usd_total.
 """
 
 from __future__ import annotations
@@ -25,7 +31,15 @@ import structlog
 from . import context as ctx
 from . import llm
 from .idempotency import cache
-from .metrics import queries_total, query_duration_seconds, retrieval_chunks_returned_total
+from .metrics import (
+    llm_cost_cap_exceeded_total,
+    llm_cost_usd_total,
+    llm_tokens_total,
+    queries_total,
+    query_duration_seconds,
+    retrieval_chunks_returned_total,
+)
+from .spend import compute_cost, get_daily_cap, get_today_spend_usd, record_usage
 
 log = structlog.get_logger()
 
@@ -38,6 +52,7 @@ ACTION_VERBS = {
 }
 
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
+_EVENT_QUERY_RESPONSE = "query.response"
 
 
 async def _emit_event(event_type: str, payload: dict[str, Any]) -> None:
@@ -87,11 +102,14 @@ async def handle_query(event: dict[str, Any]) -> None:
     """Handle a query.received event.
 
     1. Check idempotency cache (D-046)
-    2. Retrieve knowledge via orchestrator (D-043)
-    3. Check for action intent (D-045)
-    4. Assemble context (D-044)
-    5. Call LLM (D-077)
-    6. Emit query.response (with chunk_ids for Block 18, v0.3)
+    2. Check for action intent (D-045)
+    3. Retrieve system documents via orchestrator (D-043, D-048)
+    4. Retrieve knowledge chunks via orchestrator (D-043)
+    5. Check daily spend cap — return canned response if exceeded (D-125, D-006)
+    6. Assemble context (D-044)
+    7. Call LLM (D-077)
+    8. Record LLM usage to clive_state.llm_usage (D-125)
+    9. Emit query.response (with chunk_ids for Block 18, v0.3)
     """
     start_time = time.monotonic()
 
@@ -107,7 +125,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     cached = cache.get(conversation_id, event_id)
     if cached:
         log.info("idempotency_cache_hit", event_id=str(event_id))
-        await _emit_event("query.response", {**cached, "conversation_id": str(conversation_id)})
+        await _emit_event(_EVENT_QUERY_RESPONSE, {**cached, "conversation_id": str(conversation_id)})
         query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
@@ -137,7 +155,7 @@ async def handle_query(event: dict[str, Any]) -> None:
             "chunk_ids": [],  # No retrieval performed
         }
         cache.set(conversation_id, event_id, response_payload)
-        await _emit_event("query.response", {**response_payload, "conversation_id": str(conversation_id)})
+        await _emit_event(_EVENT_QUERY_RESPONSE, {**response_payload, "conversation_id": str(conversation_id)})
         query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
@@ -187,7 +205,56 @@ async def handle_query(event: dict[str, Any]) -> None:
     # 5. Retrieve conversation history from event payload
     conversation_history = event.get("conversation_history", [])
 
-    # 6. Assemble context (D-044)
+    # 6. Spend cap gate — D-125, D-006
+    # Check before assembling context and calling LLM.
+    # Cap = pre-authorised daily limit set by owner; no confirmation dialog needed.
+    daily_cap = get_daily_cap()
+    if daily_cap is not None:
+        today_spend = await get_today_spend_usd()
+        if today_spend >= daily_cap:
+            log.warning(
+                "spend_cap_reached",
+                today_spend_usd=today_spend,
+                cap_usd=daily_cap,
+            )
+            llm_cost_cap_exceeded_total.inc()
+
+            # Emit cost.cap_exceeded to Block 13 — routes to owner notification (D-003)
+            await _emit_event(
+                "cost.cap_exceeded",
+                {
+                    "event_id": str(event_id),
+                    "conversation_id": str(conversation_id),
+                    "today_spend_usd": today_spend,
+                    "cap_usd": daily_cap,
+                },
+            )
+
+            # Canned response — no LLM call made
+            canned = (
+                "Daily spend cap reached. "
+                "I won't make further LLM calls today. "
+                "The cap resets at midnight UTC."
+            )
+            response_payload = {
+                "event_id": str(event_id),
+                "response_text": canned,
+                "confidence": {
+                    "chunks_returned": len(ranked_chunks),
+                    "highest_relevance_score": confidence["highest_relevance_score"],
+                    "threshold_met": False,
+                },
+                "chunk_ids": chunk_ids,
+            }
+            cache.set(conversation_id, event_id, response_payload)
+            await _emit_event(
+                _EVENT_QUERY_RESPONSE,
+                {**response_payload, "conversation_id": str(conversation_id)},
+            )
+            query_duration_seconds.observe(time.monotonic() - start_time)
+            return
+
+    # 7. Assemble context (D-044)
     assembled = ctx.assemble(
         personality=personality_doc,
         alignment_rules=alignment_doc,
@@ -195,8 +262,8 @@ async def handle_query(event: dict[str, Any]) -> None:
         retrieved_chunks=ranked_chunks,
     )
 
-    # 7. Call LLM (D-077)
-    response_text = await llm.complete(
+    # 8. Call LLM (D-077) — returns (text, usage_data) since v0.6
+    response_text, usage_data = await llm.complete(
         personality=assembled.personality,
         alignment_rules=assembled.alignment_rules,
         conversation_history=assembled.conversation_history,
@@ -204,7 +271,26 @@ async def handle_query(event: dict[str, Any]) -> None:
         user_query=user_input,
     )
 
-    # 8. Build response and cache it
+    # 9. Record usage to clive_state.llm_usage (D-125)
+    cost_usd = compute_cost(
+        usage_data["model"],
+        usage_data["prompt_tokens"],
+        usage_data["completion_tokens"],
+    )
+    await record_usage(
+        usage_data["model"],
+        usage_data["prompt_tokens"],
+        usage_data["completion_tokens"],
+        cost_usd,
+    )
+
+    # Prometheus cost metrics (D-125, D-122)
+    model_label = usage_data["model"]
+    llm_tokens_total.labels(model=model_label, type="prompt").inc(usage_data["prompt_tokens"])
+    llm_tokens_total.labels(model=model_label, type="completion").inc(usage_data["completion_tokens"])
+    llm_cost_usd_total.labels(model=model_label).inc(cost_usd)
+
+    # 10. Build response and cache it
     # chunk_ids included so Block 18 can tag specific chunks as poor quality
     response_payload = {
         "event_id": str(event_id),
@@ -214,9 +300,9 @@ async def handle_query(event: dict[str, Any]) -> None:
     }
     cache.set(conversation_id, event_id, response_payload)
 
-    # 9. Emit query.response
+    # 11. Emit query.response
     await _emit_event(
-        "query.response",
+        _EVENT_QUERY_RESPONSE,
         {**response_payload, "conversation_id": str(conversation_id)},
     )
 
@@ -228,4 +314,6 @@ async def handle_query(event: dict[str, Any]) -> None:
         event_id=str(event_id),
         chunks_used=len(assembled.retrieved_chunks),
         threshold_met=confidence["threshold_met"],
+        cost_usd=cost_usd,
+        model=model_label,
     )

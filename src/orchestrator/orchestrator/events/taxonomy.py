@@ -63,6 +63,10 @@ EVOLUTION_BOUNDARY_BREACH = "evolution.boundary.breach"
 # Class 6 — System
 COST_THRESHOLD_APPROACHED = "cost.threshold.approached"
 COST_THRESHOLD_EXCEEDED = "cost.threshold.exceeded"
+# Block 20 — emitted by Block 8 when daily spend cap fires (v0.6, D-125).
+# Distinct from COST_THRESHOLD_EXCEEDED (which is a Prometheus-triggered alert).
+# Routes to Block 23 as an owner notification.
+COST_CAP_EXCEEDED = "cost.cap_exceeded"
 SYSTEM_HEALTH_DEGRADED = "system.health.degraded"
 SYSTEM_OVERRIDE_ISSUED = "system.override.issued"
 SYSTEM_OVERRIDE_ACTIVE = "system.override.active"

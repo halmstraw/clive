@@ -27,6 +27,7 @@ v0.3 additions:
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 import uuid
 from typing import Any
 
@@ -38,7 +39,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from .auth import is_authenticated, make_auth_metadata
 from .db import get_pool
 from .minio_client import upload_document
-from .metrics import telegram_commands_total
+from .metrics import rate_limited_total, telegram_commands_total
 from .session import sessions
 
 log = structlog.get_logger()
@@ -103,6 +104,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # D-057: channel-as-authentication
     if not is_authenticated(chat_id):
         return  # Silent ignore — not the owner
+
+    # Block 20 — inbound rate limiting (D-125, v0.6).
+    # RATE_LIMIT_QUERIES_PER_HOUR: optional env var; no limit if unset/0.
+    # Counter resets at the top of each UTC clock hour.
+    rate_limit = int(os.environ.get("RATE_LIMIT_QUERIES_PER_HOUR", "0") or "0")
+    if rate_limit > 0:
+        current_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        if _rate_limit_state["hour"] != current_hour:
+            _rate_limit_state["hour"] = current_hour
+            _rate_limit_state["count"] = 0
+        if _rate_limit_state["count"] >= rate_limit:
+            rate_limited_total.inc()
+            log.info("rate_limit_hit", chat_id=chat_id, count=_rate_limit_state["count"])
+            if update.message:
+                await update.message.reply_text(
+                    "Rate limit reached for this hour. Please try again next hour."
+                )
+            return
+        _rate_limit_state["count"] += 1
 
     telegram_commands_total.labels(command="query").inc()
 
@@ -970,6 +990,11 @@ async def handle_bad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 # Cleared on /ingest_confirm or overwritten by a new document.
 _pending_ingests: dict[int, dict[str, Any]] = {}
 
+# Block 20 — in-memory rate limit state (D-125, v0.6).
+# Tracks query count in the current UTC clock hour.
+# Resets when the clock hour changes.
+_rate_limit_state: dict[str, Any] = {"hour": None, "count": 0}
+
 
 async def handle_document_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle a document sent without /ingest caption — mobile-compatible ingest (D-114).
@@ -1185,6 +1210,9 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     last_doc_name = result.get("last_doc_name")
     last_doc_at = result.get("last_doc_at")
     last_query_at = result.get("last_query_at")
+    # Block 20 — spend data (D-125, v0.6)
+    llm_spend_today_usd = result.get("llm_spend_today_usd", 0.0)
+    daily_cap_usd = result.get("daily_cap_usd")  # None if not configured
 
     lines = ["CLIVE Status\n"]
 
@@ -1201,7 +1229,14 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         lines.append("Last query: none yet")
 
+
+    # Block 20 — LLM spend display (D-125, v0.6)
+    lines.append(f"LLM spend today: ${llm_spend_today_usd:.4f}")
+    if daily_cap_usd is not None:
+        lines.append(f"Daily cap: ${daily_cap_usd:.4f}")
+    else:
+        lines.append("Daily cap: no cap set")
     lines.append("\n/list — see all documents")
 
     await update.message.reply_text("\n".join(lines))
-    log.info("status_delivered", chat_id=chat_id, doc_count=doc_count)
+    log.info("status_delivered", chat_id=chat_id, doc_count=doc_count, llm_spend=llm_spend_today_usd)

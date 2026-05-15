@@ -2,12 +2,13 @@
 
 Block 8 does not call Block 16 directly (D-003).
 Block 13 brokers the call as a synchronous sub-step within
-the query.submitted event lifecycle.
+the query.received event lifecycle.
 
 At v0.1 this is a direct async function call to the storage
 layer, logged but not a full event bus round-trip.
 
 v0.3: retrieve_document_by_filename added for T8 deletion lookup (D-109).
+v0.6: retrieve_status extended with today's LLM spend and daily cap (D-125).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import structlog
 log = structlog.get_logger()
 
 _pool: asyncpg.Pool | None = None
+_ERR_POOL_NOT_INIT = "Retrieval pool not initialised"
 
 
 async def init_pool() -> None:
@@ -49,7 +51,7 @@ async def retrieve(
     Enforces zone boundary at query time (D-050).
     """
     if _pool is None:
-        raise RuntimeError("Retrieval pool not initialised")
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
 
     log.info(
         "retrieval_start",
@@ -121,7 +123,7 @@ async def retrieve_system_document(
     Returns full document content, version_id, timestamp, is_active.
     """
     if _pool is None:
-        raise RuntimeError("Retrieval pool not initialised")
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
 
     async with _pool.acquire() as conn:
         if version_id:
@@ -167,7 +169,7 @@ async def retrieve_document_by_filename(
     If no match: source_keys = [], chunk_count = 0.
     """
     if _pool is None:
-        raise RuntimeError("Retrieval pool not initialised")
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
 
     async with _pool.acquire() as conn:
         rows = await conn.fetch(
@@ -210,7 +212,7 @@ async def retrieve_document_list(
     Returns {documents: [{filename, source_key, chunk_count, ingested_at}], total: N}.
     """
     if _pool is None:
-        raise RuntimeError("Retrieval pool not initialised")
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
 
     async with _pool.acquire() as conn:
         rows = await conn.fetch(
@@ -319,17 +321,20 @@ async def store_conversation_turn(
 
 
 # ---------------------------------------------------------------------------
-# System status — /status command (v0.4)
+# System status — /status command (v0.4, extended v0.6)
 # ---------------------------------------------------------------------------
 
 async def retrieve_status(zone_scope: str) -> dict[str, Any]:
     """Return system status metrics for the /status command.
 
-    Aggregates document count, chunk count, last ingest, and last query time.
-    All values are None-safe — returns gracefully with empty knowledge base.
+    Aggregates document count, chunk count, last ingest, last query time,
+    and today's LLM spend (D-125, v0.6).
+
+    All values are None-safe — returns gracefully with empty knowledge base
+    or empty llm_usage table.
     """
     if _pool is None:
-        raise RuntimeError("Retrieval pool not initialised")
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
 
     async with _pool.acquire() as conn:
         counts = await conn.fetchrow(
@@ -364,6 +369,15 @@ async def retrieve_status(zone_scope: str) -> dict[str, Any]:
             """
         )
 
+        # Block 20 — today's LLM spend (D-125, v0.6)
+        spend_row = await conn.fetchrow(
+            """
+            SELECT COALESCE(SUM(cost_usd), 0.0) AS total_spend
+            FROM clive_state.llm_usage
+            WHERE created_at >= CURRENT_DATE
+            """
+        )
+
     doc_count = int(counts["doc_count"]) if counts else 0
     chunk_count = int(counts["chunk_count"]) if counts else 0
 
@@ -376,10 +390,22 @@ async def retrieve_status(zone_scope: str) -> dict[str, Any]:
 
     last_query_at = last_query["created_at"].isoformat() if last_query else None
 
+    # Block 20 — today's spend and configured cap
+    llm_spend_today_usd = float(spend_row["total_spend"]) if spend_row else 0.0
+    daily_cap_str = os.environ.get("DAILY_SPEND_CAP_USD", "").strip()
+    daily_cap_usd: float | None = None
+    if daily_cap_str:
+        try:
+            daily_cap_usd = float(daily_cap_str)
+        except ValueError:
+            pass
+
     return {
         "doc_count": doc_count,
         "chunk_count": chunk_count,
         "last_doc_name": last_doc_name,
         "last_doc_at": last_doc_at,
         "last_query_at": last_query_at,
+        "llm_spend_today_usd": llm_spend_today_usd,
+        "daily_cap_usd": daily_cap_usd,
     }

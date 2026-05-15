@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-123
+Last decision ID: D-124
 Last updated: 2026-05-15
 
 | ID | Title | Status | Date | Blocks | File |
@@ -132,3 +132,4 @@ Last updated: 2026-05-15
 | D-121 | Grafana exposed publicly via Caddy reverse proxy at grafana.halmshaw.co.uk | Accepted | 2026-05-15 | Block 25, Block 27 | [D-121-grafana-public-access-caddy.md](docs/decisions/D-121-grafana-public-access-caddy.md) |
 | D-122 | CLIVE v0.5 scope approved — Block 25 observability complete delivery (Phase 1 + Phase 2) | Accepted | 2026-05-15 | Block 25, Block 13, Block 8, Block 14/15, Block 23, Block 27, Block 28 | [D-122-v05-scope-approved.md](docs/decisions/D-122-v05-scope-approved.md) |
 | D-123 | CLIVE v0.5 acceptance criteria defined — seven criteria for Block 25 complete delivery | Accepted | 2026-05-15 | Block 25, Block 13, Block 8, Block 14/15, Block 23, Block 28 | [D-123-v05-acceptance-criteria.md](docs/decisions/D-123-v05-acceptance-criteria.md) |
+| D-124 | CLIVE v0.5 signed off — all seven criteria met 15 May 2026 | Accepted | 2026-05-15 | All blocks | [D-124-v05-signed-off.md](docs/decisions/D-124-v05-signed-off.md) |

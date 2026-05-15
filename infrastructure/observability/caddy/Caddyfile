@@ -1,0 +1,3 @@
+grafana.halmshaw.co.uk {
+    reverse_proxy grafana:3000
+}

@@ -38,6 +38,7 @@
     - 05_application_tables.sql
     - 06_chunks_ingestion_columns.sql
     - 07_v03_tables.sql
+    - 08_v04_tables.sql
 
 - name: Create observability config directories on VM
   ansible.builtin.file:
@@ -58,6 +59,7 @@
     - /home/clive/compose/observability/grafana/provisioning/dashboards
     - /home/clive/compose/observability/grafana/provisioning/alerting
     - /home/clive/compose/observability/grafana/dashboards
+    - /home/clive/compose/observability/caddy
 
 - name: Copy Prometheus config
   ansible.builtin.copy:
@@ -122,6 +124,14 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../observability/grafana/dashboards/system_overview.json"
     dest: /home/clive/compose/observability/grafana/dashboards/system_overview.json
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Caddyfile
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/caddy/Caddyfile"
+    dest: /home/clive/compose/observability/caddy/Caddyfile
     owner: clive
     group: clive
     mode: "0644"

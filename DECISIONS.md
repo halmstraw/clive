@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-118
+Last decision ID: D-120
 Last updated: 2026-05-15
 
 | ID | Title | Status | Date | Blocks | File |
@@ -127,3 +127,5 @@ Last updated: 2026-05-15
 | D-116 | CLIVE v0.4 acceptance criteria extended — conversation memory and /status | Accepted | 2026-05-14 | Block 8, Block 13, Block 16, Block 23, Block 28 | [D-116-v04-expanded-acceptance-criteria.md](docs/decisions/D-116-v04-expanded-acceptance-criteria.md) |
 | D-117 | Block 25 observability stack — Prometheus, Loki, Grafana | Accepted | 2026-05-15 | Block 25, Block 27, Block 28 | [D-117-block25-observability-tech-stack.md](docs/decisions/D-117-block25-observability-tech-stack.md) |
 | D-118 | Block 25 alert routing via orchestrator webhook — D-003 compliant | Accepted | 2026-05-15 | Block 25, Block 13, Block 4, Block 23 | [D-118-block25-alert-routing-via-orchestrator.md](docs/decisions/D-118-block25-alert-routing-via-orchestrator.md) |
+| D-119 | Telegram /help command — lists all available commands and usage | Accepted | 2026-05-15 | Block 23, Block 3 | [D-119-telegram-help-command.md](docs/decisions/D-119-telegram-help-command.md) |
+| D-120 | CLIVE v0.4 signed off — all seven criteria met 15 May 2026 | Accepted | 2026-05-15 | All blocks | [D-120-v04-signed-off.md](docs/decisions/D-120-v04-signed-off.md) |

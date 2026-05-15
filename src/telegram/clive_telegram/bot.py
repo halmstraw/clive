@@ -940,3 +940,241 @@ async def handle_bad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
     await update.message.reply_text("Noted. Tagged as poor quality.")
+
+
+# ---------------------------------------------------------------------------
+# v0.4 — Mobile ingest (D-114) and /list, /status commands
+# ---------------------------------------------------------------------------
+
+# Pending mobile ingest state: chat_id → {file_id, original_filename, file_size, mime_type}
+# Set when a document is received without /ingest caption.
+# Cleared on /ingest_confirm or overwritten by a new document.
+_pending_ingests: dict[int, dict[str, Any]] = {}
+
+
+async def handle_document_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle a document sent without /ingest caption — mobile-compatible ingest (D-114).
+
+    Stores pending ingest state and prompts owner for confirmation.
+    The owner sends /ingest_confirm to complete the ingest.
+    Desktop caption flow (/ingest caption) is handled separately and
+    unchanged — this handler only fires when there is no /ingest caption.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    document = update.message.document
+    if not document:
+        return
+
+    original_name = document.file_name or "document"
+
+    # D-098: size check before accepting
+    if document.file_size and document.file_size > MAX_INGEST_BYTES:
+        await update.message.reply_text(
+            f"File too large ({document.file_size // (1024 * 1024)} MB). Maximum is 10 MB."
+        )
+        return
+
+    # Store pending state (overwrites if owner sends another file before confirming)
+    _pending_ingests[chat_id] = {
+        "file_id": document.file_id,
+        "original_filename": original_name,
+        "file_size": document.file_size,
+        "mime_type": document.mime_type or "application/octet-stream",
+    }
+
+    log.info(
+        "mobile_ingest_pending",
+        chat_id=chat_id,
+        original_filename=original_name,
+    )
+
+    await update.message.reply_text(
+        f"Ingest {original_name}?\n"
+        "Send /ingest_confirm to proceed, or ignore to cancel."
+    )
+
+
+async def handle_ingest_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /ingest_confirm — complete a pending mobile ingest (D-114).
+
+    Downloads the file stored in pending state, uploads to MinIO,
+    and emits ingest.received exactly as the desktop caption flow does.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    pending = _pending_ingests.pop(chat_id, None)
+    if not pending:
+        await update.message.reply_text(
+            "No pending ingest. Send a file first, then /ingest_confirm."
+        )
+        return
+
+    original_name = pending["original_filename"]
+    file_id = pending["file_id"]
+    file_size = pending["file_size"]
+    mime_type = pending["mime_type"]
+
+    # Download from Telegram
+    try:
+        tg_file = await context.bot.get_file(file_id)
+        raw_bytes = bytes(await tg_file.download_as_bytearray())
+    except Exception as exc:
+        log.error("ingest_confirm_download_failed", chat_id=chat_id, error=str(exc))
+        await update.message.reply_text(
+            "Could not download the file. Please send it again and retry."
+        )
+        return
+
+    source_key = f"{uuid.uuid4()}/{original_name}"
+
+    try:
+        await upload_document(source_key, raw_bytes, mime_type)
+    except RuntimeError as exc:
+        log.error("minio_upload_failed", source_key=source_key, error=str(exc))
+        await update.message.reply_text(
+            "Could not store the file. Please try again."
+        )
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    log.info(
+        "ingest_confirm_received",
+        chat_id=chat_id,
+        source_key=source_key,
+        event_id=str(event_id),
+    )
+
+    await _emit_to_orchestrator(
+        "ingest.received",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "zone_scope": "personal",
+            "payload": {
+                "source_key": source_key,
+                "original_filename": original_name,
+                "file_size": file_size,
+                "content_type": mime_type,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    await update.message.reply_text(
+        f"Received {original_name}. Processing — I will follow up when done."
+    )
+
+
+async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+    """Handle /list — show all ingested documents (v0.4).
+
+    Calls the orchestrator's /retrieve/document-list endpoint (D-043 pattern).
+    Returns filename, chunk count, and ingest date for each document,
+    newest first. Replies with a clear message if the knowledge base is empty.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{ORCHESTRATOR_URL}/retrieve/document-list",
+                json={"zone_scope": "personal"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+    except Exception as exc:
+        log.error("list_fetch_failed", chat_id=chat_id, error=str(exc))
+        await update.message.reply_text("Could not retrieve document list. Please try again.")
+        return
+
+    documents = result.get("documents", [])
+    if not documents:
+        await update.message.reply_text(
+            "No documents ingested yet.\n"
+            "Send a file with /ingest as the caption (desktop) or just send "
+            "a file and reply /ingest_confirm (mobile)."
+        )
+        return
+
+    total = result.get("total", len(documents))
+    lines = [f"*Knowledge base* — {total} document(s):\n"]
+    for i, doc in enumerate(documents, 1):
+        date = doc["ingested_at"][:10]  # YYYY-MM-DD
+        chunks = doc["chunk_count"]
+        lines.append(f"{i}. {doc['filename']} — {chunks} chunk(s) — {date}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    log.info("list_delivered", chat_id=chat_id, doc_count=total)
+
+
+async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+    """Handle /status — show system status summary (v0.4).
+
+    Calls the orchestrator's /retrieve/status endpoint (D-043 pattern).
+    Returns document count, chunk count, last ingest, and last query time.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{ORCHESTRATOR_URL}/retrieve/status",
+                json={"zone_scope": "personal"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+    except Exception as exc:
+        log.error("status_fetch_failed", chat_id=chat_id, error=str(exc))
+        await update.message.reply_text("Could not retrieve status. Please try again.")
+        return
+
+    doc_count = result.get("doc_count", 0)
+    chunk_count = result.get("chunk_count", 0)
+    last_doc_name = result.get("last_doc_name")
+    last_doc_at = result.get("last_doc_at")
+    last_query_at = result.get("last_query_at")
+
+    lines = ["*CLIVE Status*\n"]
+
+    if doc_count == 0:
+        lines.append("Knowledge base: empty")
+    else:
+        lines.append(f"Knowledge base: {doc_count} document(s), {chunk_count:,} chunk(s)")
+
+    if last_doc_name and last_doc_at:
+        lines.append(f"Last ingest: {last_doc_name} ({last_doc_at[:10]})")
+
+    if last_query_at:
+        lines.append(f"Last query: {last_query_at[:10]}")
+    else:
+        lines.append("Last query: none yet")
+
+    lines.append("\n/list — see all documents")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    log.info("status_delivered", chat_id=chat_id, doc_count=doc_count)

@@ -1,6 +1,8 @@
 """HTTP health endpoint and API routes for Block 13.
 
 v0.3: added /retrieve/document-by-filename for T8 deletion lookup (D-109).
+v0.4: added /retrieve/document-list (/list command) and /retrieve/status
+      (/status command); both route through orchestrator per D-003/D-043.
 """
 
 from __future__ import annotations
@@ -9,7 +11,13 @@ from aiohttp import web
 
 from .bus import bus
 from .events.schema import CLIVEEvent
-from .retrieval import retrieve, retrieve_document_by_filename, retrieve_system_document
+from .retrieval import (
+    retrieve,
+    retrieve_document_by_filename,
+    retrieve_document_list,
+    retrieve_status,
+    retrieve_system_document,
+)
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
@@ -68,6 +76,29 @@ async def handle_retrieve_document_by_filename(request: web.Request) -> web.Resp
     return web.json_response(result)
 
 
+async def handle_retrieve_document_list(request: web.Request) -> web.Response:
+    """Return list of ingested documents for Block 23 /list command (v0.4).
+
+    Returns {documents: [{filename, source_key, chunk_count, ingested_at}], total: N}.
+    """
+    data = await request.json()
+    zone_scope = data.get("zone_scope", "personal")
+    limit = int(data.get("limit", 25))
+    result = await retrieve_document_list(zone_scope=zone_scope, limit=limit)
+    return web.json_response(result)
+
+
+async def handle_retrieve_status(request: web.Request) -> web.Response:
+    """Return system status metrics for Block 23 /status command (v0.4).
+
+    Returns doc_count, chunk_count, last_doc_name, last_doc_at, last_query_at.
+    """
+    data = await request.json()
+    zone_scope = data.get("zone_scope", "personal")
+    result = await retrieve_status(zone_scope=zone_scope)
+    return web.json_response(result)
+
+
 async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/health", handle_health)
@@ -75,6 +106,8 @@ async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.Ap
     app.router.add_post("/retrieve/knowledge", handle_retrieve_knowledge)
     app.router.add_post("/retrieve/system-document", handle_retrieve_system_document)
     app.router.add_post("/retrieve/document-by-filename", handle_retrieve_document_by_filename)
+    app.router.add_post("/retrieve/document-list", handle_retrieve_document_list)
+    app.router.add_post("/retrieve/status", handle_retrieve_status)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)

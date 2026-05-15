@@ -7,6 +7,11 @@ Every push function that delivers to the surface includes event_id explicitly
 so Block 23's idempotency check has a stable key to work with. Omitting
 event_id causes event_id="" at the surface, which poisons the idempotency
 set and blocks all subsequent responses.
+
+v0.4 (D-115): push_query_to_block8 fetches conversation history from DB and
+injects it into the payload; stores user turn after successful push.
+push_response_to_surface stores the assistant turn after successful push.
+Failures are logged and non-fatal — query proceeds without history.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import os
 import httpx
 import structlog
 
+from . import retrieval
 from .events.schema import CLIVEEvent
 
 log = structlog.get_logger()
@@ -26,18 +32,47 @@ PROCESSING_SERVICE_URL = os.environ.get("PROCESSING_SERVICE_URL", "http://proces
 
 
 async def push_query_to_block8(event: CLIVEEvent) -> None:
-    """Push query.received to Block 8."""
+    """Push query.received to Block 8.
+
+    D-115: fetches conversation history before pushing, stores user turn after.
+    History is injected as conversation_history in the payload.
+    Memory failures are non-fatal — query proceeds without history.
+    """
+    conversation_id = event.conversation_id
+    user_input = event.payload.get("input_text", "")
+
+    # Fetch previous turns (before adding the current one)
+    history: list[dict[str, str]] = []
+    if conversation_id:
+        try:
+            history = await retrieval.get_conversation_history(conversation_id)
+        except Exception as exc:
+            log.warning("memory_fetch_failed", error=str(exc))
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{QUERY_SERVICE_URL}/query",
             json={
                 **event.payload,
                 "event_id": str(event.event_id),
-                "conversation_id": str(event.conversation_id),
+                "conversation_id": str(conversation_id),
+                "conversation_history": history,
             },
             timeout=10.0,
         )
         resp.raise_for_status()
+
+    # Store user turn after successful push (idempotent on event_id + role)
+    if conversation_id and user_input:
+        try:
+            await retrieval.store_conversation_turn(
+                event_id=event.event_id,
+                conversation_id=conversation_id,
+                role="user",
+                content=user_input,
+            )
+        except Exception as exc:
+            log.warning("memory_store_failed", role="user", error=str(exc))
 
 
 async def push_response_to_surface(event: CLIVEEvent) -> None:
@@ -48,6 +83,8 @@ async def push_response_to_surface(event: CLIVEEvent) -> None:
     on the object, not in the payload dict). Without this, deliver_response
     receives event_id="" and the idempotency cache blocks all responses
     after the first one.
+
+    D-115: stores assistant turn after successful push.
     """
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -60,6 +97,19 @@ async def push_response_to_surface(event: CLIVEEvent) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
+
+    # Store assistant turn after successful push (idempotent on event_id + role)
+    response_text = event.payload.get("response_text", "")
+    if event.conversation_id and response_text:
+        try:
+            await retrieval.store_conversation_turn(
+                event_id=event.event_id,
+                conversation_id=event.conversation_id,
+                role="assistant",
+                content=response_text,
+            )
+        except Exception as exc:
+            log.warning("memory_store_failed", role="assistant", error=str(exc))
 
 
 async def push_alert_to_surface(event: CLIVEEvent) -> None:

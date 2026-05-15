@@ -9,6 +9,12 @@ v0.3 additions:
   /action-confirmation HTTP endpoint — Block 9 push to surface
   /action-outcome HTTP endpoint — Block 9 rejection/timeout push
   /deletion-result HTTP endpoint — deletion.complete / deletion.not_found push
+
+v0.4 additions:
+  /ingest_confirm — complete a pending mobile ingest (D-114)
+  /list — list ingested documents (v0.4)
+  /status — system status summary (v0.4)
+  Document handler without /ingest caption — mobile ingest prompt (D-114)
 """
 
 from __future__ import annotations
@@ -36,9 +42,13 @@ from .bot import (
     handle_confirm_activate,
     handle_confirm_delete,
     handle_delete,
+    handle_document_received,
     handle_ingest,
+    handle_ingest_confirm,
+    handle_list,
     handle_message,
     handle_start,
+    handle_status,
     set_app,
 )
 from . import db
@@ -68,7 +78,6 @@ async def handle_ingest_status_push(request: web.Request) -> web.Response:
     """Receive ingest.processed or ingest.rejected events pushed from Block 13."""
     data = await request.json()
     chat_id = get_owner_chat_id()
-    # Merge payload fields into the top-level dict for deliver_ingest_status
     payload = {**data, **data.get("payload", {})}
     asyncio.create_task(deliver_ingest_status(payload, chat_id))
     return web.json_response({"status": "accepted"})
@@ -86,7 +95,6 @@ async def handle_action_confirmation_push(request: web.Request) -> web.Response:
     if chat_id_raw is None:
         chat_id_raw = get_owner_chat_id()
     chat_id = int(chat_id_raw)
-    # Flatten payload for deliver_action_confirmation
     payload = {**data, **data.get("payload", {})}
     asyncio.create_task(deliver_action_confirmation(payload, chat_id))
     return web.json_response({"status": "accepted"})
@@ -142,10 +150,25 @@ async def main() -> None:
     # v0.3 — Block 18 feedback command
     application.add_handler(CommandHandler("bad", handle_bad))
 
-    # D-101: caption command — document with /ingest caption
+    # v0.4 — mobile ingest and new commands (D-114)
+    application.add_handler(CommandHandler("ingest_confirm", handle_ingest_confirm))
+    application.add_handler(CommandHandler("list", handle_list))
+    application.add_handler(CommandHandler("status", handle_status))
+
+    # Document handlers — order matters:
+    # 1. /ingest caption (desktop, D-101) takes priority
+    # 2. Any other document (mobile prompt, D-114)
     application.add_handler(
         MessageHandler(filters.Document.ALL & filters.CaptionRegex(r"^/ingest"), handle_ingest)
     )
+    application.add_handler(
+        MessageHandler(
+            filters.Document.ALL & ~filters.CaptionRegex(r"^/ingest"),
+            handle_document_received,
+        )
+    )
+
+    # Free-text queries
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     set_app(application)
 

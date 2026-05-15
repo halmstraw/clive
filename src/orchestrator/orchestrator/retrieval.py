@@ -196,3 +196,190 @@ async def retrieve_document_by_filename(
     )
 
     return {"source_keys": source_keys, "chunk_count": total_chunks}
+
+
+async def retrieve_document_list(
+    zone_scope: str,
+    limit: int = 25,
+) -> dict[str, Any]:
+    """Return ingested documents with chunk counts and ingest dates (v0.4 /list).
+
+    source_key format is {uuid}/{original_filename} — strips UUID prefix
+    to return the original filename for display.
+
+    Returns {documents: [{filename, source_key, chunk_count, ingested_at}], total: N}.
+    """
+    if _pool is None:
+        raise RuntimeError("Retrieval pool not initialised")
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT source_key,
+                   count(*)        AS chunk_count,
+                   max(created_at) AS ingested_at
+            FROM clive_search.chunks
+            WHERE zone_of_origin = $1
+            GROUP BY source_key
+            ORDER BY max(created_at) DESC
+            LIMIT $2
+            """,
+            zone_scope,
+            limit,
+        )
+
+    documents = []
+    for row in rows:
+        source_key = row["source_key"]
+        filename = source_key.split("/", 1)[-1] if "/" in source_key else source_key
+        documents.append({
+            "filename": filename,
+            "source_key": source_key,
+            "chunk_count": int(row["chunk_count"]),
+            "ingested_at": row["ingested_at"].isoformat(),
+        })
+
+    log.info("document_list_retrieved", zone_scope=zone_scope, total=len(documents))
+    return {"documents": documents, "total": len(documents)}
+
+
+# ---------------------------------------------------------------------------
+# Block 11 — Conversation memory (v0.4, D-115)
+# ---------------------------------------------------------------------------
+
+CONVERSATION_HISTORY_LIMIT = int(
+    __import__("os").environ.get("CONVERSATION_HISTORY_LIMIT", "10")
+)
+
+
+async def get_conversation_history(
+    conversation_id: uuid.UUID,
+    limit: int | None = None,
+) -> list[dict[str, str]]:
+    """Return recent conversation turns for a conversation, oldest first.
+
+    D-115: Block 13 mediates memory reads. Returns [] if pool not ready
+    (non-fatal — query proceeds without history).
+    """
+    if _pool is None:
+        return []
+
+    effective_limit = limit if limit is not None else CONVERSATION_HISTORY_LIMIT
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT role, content
+            FROM clive_state.conversation_turns
+            WHERE conversation_id = $1
+            ORDER BY turn_number DESC
+            LIMIT $2
+            """,
+            conversation_id,
+            effective_limit,
+        )
+
+    # Reverse so history is oldest-first (chronological for LLM prompt)
+    return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+
+async def store_conversation_turn(
+    event_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    role: str,
+    content: str,
+) -> None:
+    """Store a conversation turn. Idempotent on (event_id, role).
+
+    D-025: ON CONFLICT DO NOTHING ensures at-least-once delivery is safe.
+    turn_number is auto-assigned as MAX(turn_number)+1 within the conversation.
+    """
+    if _pool is None:
+        return
+
+    async with _pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO clive_state.conversation_turns
+                (event_id, conversation_id, turn_number, role, content)
+            SELECT $1, $2,
+                   COALESCE((
+                       SELECT MAX(turn_number)
+                       FROM clive_state.conversation_turns
+                       WHERE conversation_id = $2
+                   ), 0) + 1,
+                   $3, $4
+            ON CONFLICT (event_id, role) DO NOTHING
+            """,
+            event_id,
+            conversation_id,
+            role,
+            content,
+        )
+
+
+# ---------------------------------------------------------------------------
+# System status — /status command (v0.4)
+# ---------------------------------------------------------------------------
+
+async def retrieve_status(zone_scope: str) -> dict[str, Any]:
+    """Return system status metrics for the /status command.
+
+    Aggregates document count, chunk count, last ingest, and last query time.
+    All values are None-safe — returns gracefully with empty knowledge base.
+    """
+    if _pool is None:
+        raise RuntimeError("Retrieval pool not initialised")
+
+    async with _pool.acquire() as conn:
+        counts = await conn.fetchrow(
+            """
+            SELECT count(DISTINCT source_key) AS doc_count,
+                   count(*)                   AS chunk_count
+            FROM clive_search.chunks
+            WHERE zone_of_origin = $1
+            """,
+            zone_scope,
+        )
+
+        last_doc = await conn.fetchrow(
+            """
+            SELECT source_key, max(created_at) AS ingested_at
+            FROM clive_search.chunks
+            WHERE zone_of_origin = $1
+            GROUP BY source_key
+            ORDER BY max(created_at) DESC
+            LIMIT 1
+            """,
+            zone_scope,
+        )
+
+        last_query = await conn.fetchrow(
+            """
+            SELECT created_at
+            FROM clive_state.conversation_turns
+            WHERE role = 'user'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        )
+
+    doc_count = int(counts["doc_count"]) if counts else 0
+    chunk_count = int(counts["chunk_count"]) if counts else 0
+
+    last_doc_name = None
+    last_doc_at = None
+    if last_doc and last_doc["source_key"]:
+        sk = last_doc["source_key"]
+        last_doc_name = sk.split("/", 1)[-1] if "/" in sk else sk
+        last_doc_at = last_doc["ingested_at"].isoformat()
+
+    last_query_at = last_query["created_at"].isoformat() if last_query else None
+
+    return {
+        "doc_count": doc_count,
+        "chunk_count": chunk_count,
+        "last_doc_name": last_doc_name,
+        "last_doc_at": last_doc_at,
+        "last_query_at": last_query_at,
+    }

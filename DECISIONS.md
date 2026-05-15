@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-111
+Last decision ID: D-116
 Last updated: 2026-05-14
 
 | ID | Title | Status | Date | Blocks | File |
@@ -120,3 +120,8 @@ Last updated: 2026-05-14
 | D-109 | Telegram deletion command uses /delete <filename> — direct single-step pattern | Accepted | 2026-05-14 | Block 23, Block 4, Block 9, Block 14, Block 16 | [D-109-telegram-delete-command-pattern.md](docs/decisions/D-109-telegram-delete-command-pattern.md) |
 | D-110 | CLIVE v0.3 signed off — all six criteria met 14 May 2026 | Accepted | 2026-05-14 | All blocks | [D-110-v03-signed-off.md](docs/decisions/D-110-v03-signed-off.md) |
 | D-111 | Bug — /ingest caption command fails on Telegram mobile; fix deferred to v0.4 | Accepted | 2026-05-14 | Block 23, Block 14 | [D-111-mobile-ingest-bug.md](docs/decisions/D-111-mobile-ingest-bug.md) |
+| D-112 | CLIVE v0.4 scope approved — mobile ingest fix + /list command | Accepted | 2026-05-14 | Block 23, Block 14, Block 16 | [D-112-v04-scope-approved.md](docs/decisions/D-112-v04-scope-approved.md) |
+| D-113 | CLIVE v0.4 acceptance criteria defined | Accepted | 2026-05-14 | Block 23, Block 14, Block 16, Block 28 | [D-113-v04-acceptance-criteria.md](docs/decisions/D-113-v04-acceptance-criteria.md) |
+| D-114 | Mobile ingest uses document-received trigger with /ingest_confirm command | Accepted | 2026-05-14 | Block 23, Block 14 | [D-114-mobile-ingest-document-received-pattern.md](docs/decisions/D-114-mobile-ingest-document-received-pattern.md) |
+| D-115 | Conversation memory (Block 11 minimal) — store turns in DB, inject into Block 8 context | Accepted | 2026-05-14 | Block 8, Block 13, Block 16 | [D-115-conversation-memory-design.md](docs/decisions/D-115-conversation-memory-design.md) |
+| D-116 | CLIVE v0.4 acceptance criteria extended — conversation memory and /status | Accepted | 2026-05-14 | Block 8, Block 13, Block 16, Block 23, Block 28 | [D-116-v04-expanded-acceptance-criteria.md](docs/decisions/D-116-v04-expanded-acceptance-criteria.md) |

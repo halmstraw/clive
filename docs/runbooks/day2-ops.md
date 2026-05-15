@@ -12,10 +12,10 @@ For observability (Grafana, Prometheus, Loki) see `docs/runbooks/observability.m
 ## SSH Access
 
 ```bash
-ssh -i ~/.ssh/clive_vm root@138.199.149.201
+ssh -i ~/.ssh/clive_vm_ed25519 root@138.199.149.201
 ```
 
-The VM IP is `138.199.149.201`. The private key is `~/.ssh/clive_vm`.
+The VM IP is `138.199.149.201`. The private key is `~/.ssh/clive_vm_ed25519`.
 If the IP changes after a Terraform apply, update this file.
 
 ---

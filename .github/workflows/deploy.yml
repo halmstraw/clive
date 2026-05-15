@@ -213,7 +213,7 @@ jobs:
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
             up -d --no-recreate \
-            caddy prometheus loki promtail grafana node-exporter postgres-exporter cadvisor
+            caddy prometheus loki promtail grafana node-exporter postgres-exporter
 
   verify:
     name: Verify deployment

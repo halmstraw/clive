@@ -201,7 +201,7 @@ services:
       - loki_data:/loki
       - /home/clive/compose/observability/loki/config.yml:/etc/loki/config.yml:ro
     command: -config.file=/etc/loki/config.yml
-    mem_limit: 400m
+    mem_limit: 512m
     networks:
       - clive-internal
 
@@ -298,22 +298,6 @@ services:
     networks:
       - clive-internal
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    container_name: clive-cadvisor
-    restart: always
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    privileged: true
-    devices:
-      - /dev/kmsg
-    mem_limit: 150m
-    networks:
-      - clive-internal
 
 volumes:
   postgres_data:

@@ -15,6 +15,9 @@ v0.4 additions:
   /list — list ingested documents (v0.4)
   /status — system status summary (v0.4)
   Document handler without /ingest caption — mobile ingest prompt (D-114)
+
+v0.5 additions:
+  /metrics — Prometheus scrape endpoint (D-122 Phase 2)
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ import signal
 import structlog
 from aiohttp import web
 from dotenv import load_dotenv
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from .auth import get_owner_chat_id
@@ -128,6 +132,12 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     return web.json_response({"status": "ok", "block": 23})
 
 
+async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
+    """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    data = generate_latest()
+    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
+
+
 async def main() -> None:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
 
@@ -184,6 +194,7 @@ async def main() -> None:
     http_app.router.add_post("/deletion-result", handle_deletion_result_push)
 
     http_app.router.add_get("/health", handle_health)
+    http_app.router.add_get("/metrics", handle_metrics)
 
     runner = web.AppRunner(http_app)
     await runner.setup()

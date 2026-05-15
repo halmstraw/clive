@@ -3,6 +3,8 @@
 D-067: connects as clive_audit_writer role (INSERT-only).
 D-025: idempotent — duplicate event_id is acknowledged, not duplicated.
 Block 13 requirement: log write must succeed before event is dispatched.
+
+v0.5: clive_audit_writes_total counter incremented per successful write (D-122).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import asyncpg
 import structlog
 
 from .events.schema import AlignmentResult, CLIVEEvent
+from .metrics import audit_writes_total
 
 log = structlog.get_logger()
 
@@ -68,3 +71,6 @@ async def write(event: CLIVEEvent, alignment_result: AlignmentResult, routing_ou
             event.conversation_id,
             event.zone_scope,
         )
+
+    # Increment after successful DB write (D-122 Phase 2)
+    audit_writes_total.inc()

@@ -8,6 +8,8 @@ calls, Block 13 mediates).
 
 For v0.1 simplicity: Block 13 pushes query.received events to
 Block 8 via HTTP POST to /query endpoint.
+
+v0.5: /metrics endpoint added for Prometheus scraping (D-122 Phase 2).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import signal
 import structlog
 from aiohttp import web
 from dotenv import load_dotenv
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from .handler import handle_query
 
@@ -37,12 +40,19 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     return web.json_response({"status": "ok", "block": 8})
 
 
+async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
+    """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    data = generate_latest()
+    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
+
+
 async def main() -> None:
     log.info("query_service_starting", block=8)
 
     app = web.Application()
     app.router.add_post("/query", handle_query_endpoint)
     app.router.add_get("/health", handle_health)
+    app.router.add_get("/metrics", handle_metrics)
 
     runner = web.AppRunner(app)
     await runner.setup()

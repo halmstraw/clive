@@ -14,6 +14,7 @@ dependencies = [
     "aiohttp>=3.9",                # HTTP server for receiving push responses from Block 13
     "asyncpg>=0.29",               # PostgreSQL async driver for system document activation (D-079)
     "boto3>=1.34",                 # MinIO/S3 client for uploading raw documents (Block 14, D-099)
+    "prometheus-client>=0.20",     # Metrics exposition for Block 25 Phase 2 (D-122)
 ]
 
 [project.optional-dependencies]

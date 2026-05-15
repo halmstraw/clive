@@ -17,6 +17,7 @@ dependencies = [
     "pypdf>=4.0",           # PDF text extraction
     "tiktoken>=0.7",        # Token counting for chunking (D-097)
     "boto3>=1.34",          # MinIO/S3 client for fetching raw documents (D-068)
+    "prometheus-client>=0.20",  # Metrics exposition for Block 25 Phase 2 (D-122)
 ]
 
 [project.optional-dependencies]

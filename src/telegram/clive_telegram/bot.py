@@ -38,6 +38,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from .auth import is_authenticated, make_auth_metadata
 from .db import get_pool
 from .minio_client import upload_document
+from .metrics import telegram_commands_total
 from .session import sessions
 
 log = structlog.get_logger()
@@ -103,6 +104,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not is_authenticated(chat_id):
         return  # Silent ignore — not the owner
 
+    telegram_commands_total.labels(command="query").inc()
+
     user_input = update.message.text or ""
     if not user_input.strip():
         return
@@ -142,6 +145,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="other").inc()
 
     conversation_id = sessions.reset(chat_id)
     log.info("conversation_reset", chat_id=chat_id, conversation_id=str(conversation_id))
@@ -271,6 +276,8 @@ async def handle_activate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="other").inc()
+
     args = context.args or []
     if not args or args[0] not in VALID_DOCUMENT_TYPES:
         await update.message.reply_text(
@@ -331,6 +338,8 @@ async def handle_confirm_activate(update: Update, context: ContextTypes.DEFAULT_
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="other").inc()
 
     pending = _pending_activations.get(chat_id)
     if not pending:
@@ -445,6 +454,8 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="ingest").inc()
 
     document = update.message.document
     if not document:
@@ -584,6 +595,8 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="delete").inc()
+
     args = context.args or []
     if not args:
         await update.message.reply_text(
@@ -671,6 +684,8 @@ async def handle_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TY
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="delete").inc()
+
     action_request_id = _pending_deletes.get(chat_id)
     if not action_request_id:
         await update.message.reply_text(
@@ -716,6 +731,8 @@ async def handle_cancel_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="delete").inc()
 
     action_request_id = _pending_deletes.pop(chat_id, None)
     if not action_request_id:
@@ -867,6 +884,8 @@ async def handle_bad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="feedback").inc()
+
     last = _last_retrieval.get(chat_id)
     if not last:
         await update.message.reply_text(
@@ -967,6 +986,8 @@ async def handle_document_received(update: Update, context: ContextTypes.DEFAULT
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="ingest").inc()
+
     document = update.message.document
     if not document:
         return
@@ -1012,6 +1033,8 @@ async def handle_ingest_confirm(update: Update, context: ContextTypes.DEFAULT_TY
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="ingest").inc()
 
     pending = _pending_ingests.pop(chat_id, None)
     if not pending:
@@ -1092,6 +1115,8 @@ async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not is_authenticated(chat_id):
         return
 
+    telegram_commands_total.labels(command="list").inc()
+
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -1138,6 +1163,8 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = update.effective_chat.id
     if not is_authenticated(chat_id):
         return
+
+    telegram_commands_total.labels(command="status").inc()
 
     try:
         async with httpx.AsyncClient() as client:

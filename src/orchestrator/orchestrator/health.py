@@ -5,6 +5,7 @@ v0.4: added /retrieve/document-list (/list command) and /retrieve/status
       (/status command); both route through orchestrator per D-003/D-043.
 v0.5: added /alerts — Grafana webhook receiver; emits alert.triggered events
       on the internal bus per D-003/D-118.
+      added /metrics — Prometheus scrape endpoint (D-122 Phase 2).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import json
 
 import structlog
 from aiohttp import web
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from .bus import bus
 from .events.schema import CLIVEEvent
@@ -30,6 +32,12 @@ log = structlog.get_logger()
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     return web.json_response({"status": "ok", "block": 13})
+
+
+async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
+    """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    data = generate_latest()
+    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
 
 
 async def handle_event_intake(request: web.Request) -> web.Response:
@@ -173,6 +181,7 @@ async def handle_retrieve_status(request: web.Request) -> web.Response:
 async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/health", handle_health)
+    app.router.add_get("/metrics", handle_metrics)
     app.router.add_post("/events", handle_event_intake)
     app.router.add_post("/alerts", handle_alerts)
     app.router.add_post("/retrieve/knowledge", handle_retrieve_knowledge)

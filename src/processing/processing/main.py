@@ -5,6 +5,7 @@ in the background.  Returns 202 Accepted immediately so Block 13's
 push handler does not block on processing time.
 
 v0.3: /delete endpoint added for T8 deletion pipeline.
+v0.5: /metrics endpoint added for Prometheus scraping (D-122 Phase 2).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import signal
 import structlog
 from aiohttp import web
 from dotenv import load_dotenv
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import store
 from .deletion import execute_deletion, init_pool as init_deletion_pool
@@ -57,6 +59,12 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     return web.json_response({"status": "ok", "block": 15})
 
 
+async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
+    """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    data = generate_latest()
+    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
+
+
 async def main() -> None:
     log.info("processing_service_starting", block=15)
 
@@ -67,6 +75,7 @@ async def main() -> None:
     app.router.add_post("/ingest", handle_ingest)
     app.router.add_post("/delete", handle_delete)
     app.router.add_get("/health", handle_health)
+    app.router.add_get("/metrics", handle_metrics)
 
     runner = web.AppRunner(app)
     await runner.setup()

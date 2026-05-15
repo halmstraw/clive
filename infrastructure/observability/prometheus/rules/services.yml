@@ -4,7 +4,7 @@ groups:
 
       # Any CLIVE application service is down for more than 2 minutes
       - alert: CliveServiceDown
-        expr: up{job=~"orchestrator|query|telegram|processing"} == 0
+        expr: up{job=~"clive-orchestrator|clive-query|clive-telegram|clive-processing"} == 0
         for: 2m
         labels:
           severity: critical
@@ -12,22 +12,21 @@ groups:
           summary: "CLIVE service {{ $labels.job }} is down"
           description: "Service {{ $labels.job }} has been unreachable for more than 2 minutes."
 
-      # High HTTP error rate — placeholder pending Phase 2 /metrics endpoints
-      # This rule will fire once services expose http_requests_total with a status label.
+      # High HTTP error rate (Phase 2 metric — fires once /metrics endpoints are live)
       # Threshold: more than 5% of requests are 5xx over a 5-minute window.
       - alert: CliveHighErrorRate
         expr: |
           (
-            sum(rate(http_requests_total{job=~"orchestrator|query|telegram|processing",status=~"5.."}[5m])) by (job)
+            sum(rate(http_requests_total{job=~"clive-orchestrator|clive-query|clive-telegram|clive-processing",status=~"5.."}[5m])) by (job)
             /
-            sum(rate(http_requests_total{job=~"orchestrator|query|telegram|processing"}[5m])) by (job)
+            sum(rate(http_requests_total{job=~"clive-orchestrator|clive-query|clive-telegram|clive-processing"}[5m])) by (job)
           ) > 0.05
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "High HTTP error rate on {{ $labels.job }}"
-          description: "More than 5% of requests to {{ $labels.job }} are returning 5xx errors over the last 5 minutes. (placeholder — requires Phase 2 /metrics endpoints)"
+          description: "More than 5% of requests to {{ $labels.job }} are returning 5xx errors over the last 5 minutes."
 
       # Container restart loop — more than 3 restarts in 15 minutes
       - alert: ContainerRestartLoop

@@ -11,6 +11,8 @@ Flow:
   5. Embed via LiteLLM text-embedding-3-small (D-096)
   6. Write to clive_search.chunks; ON CONFLICT DO NOTHING (D-025)
   7. Emit ingest.processed with chunk count
+
+v0.5: prometheus_client instrumentation added (D-122 Phase 2).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import time
 import uuid
 from typing import Any
 
@@ -28,6 +31,7 @@ import structlog
 from .chunker import chunk_text
 from .embedder import embed_batch
 from .extractor import extract_text
+from .metrics import chunks_created_total, ingest_total, processing_duration_seconds
 from .store import write_chunks
 
 log = structlog.get_logger()
@@ -80,12 +84,16 @@ async def process(event_payload: dict[str, Any]) -> None:
     chat_id = event_payload.get("chat_id")          # D-103 criterion 6 provenance
     event_id = str(uuid.uuid4())
 
+    start_time = time.monotonic()
+
     log.info("processing_start", source_key=source_key)
 
     try:
         raw_bytes = await _fetch_from_minio(source_key)
     except Exception as exc:
         log.error("minio_fetch_failed", source_key=source_key, error=str(exc))
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -96,6 +104,8 @@ async def process(event_payload: dict[str, Any]) -> None:
     # D-098 defense-in-depth size check
     if len(raw_bytes) > MAX_FILE_SIZE:
         log.warning("file_too_large", source_key=source_key, size=len(raw_bytes))
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -111,6 +121,8 @@ async def process(event_payload: dict[str, Any]) -> None:
         text = extract_text(raw_bytes, content_type, source_key)
     except ValueError as exc:
         log.error("extraction_failed", source_key=source_key, error=str(exc))
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -120,6 +132,8 @@ async def process(event_payload: dict[str, Any]) -> None:
 
     chunks = chunk_text(text)
     if not chunks:
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -139,6 +153,8 @@ async def process(event_payload: dict[str, Any]) -> None:
             embeddings.extend(batch_embeddings)
     except Exception as exc:
         log.error("embedding_failed", source_key=source_key, error=str(exc))
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -161,6 +177,8 @@ async def process(event_payload: dict[str, Any]) -> None:
         )
     except Exception as exc:
         log.error("chunk_write_failed", source_key=source_key, error=str(exc))
+        ingest_total.labels(status="rejected").inc()
+        processing_duration_seconds.observe(time.monotonic() - start_time)
         await _emit("ingest.rejected", {
             "event_id": event_id,
             "conversation_id": conversation_id,
@@ -175,6 +193,11 @@ async def process(event_payload: dict[str, Any]) -> None:
         return
 
     log.info("processing_complete", source_key=source_key, chunks=len(chunks), inserted=inserted)
+
+    # Record success metrics (D-122 Phase 2)
+    ingest_total.labels(status="processed").inc()
+    chunks_created_total.inc(inserted)
+    processing_duration_seconds.observe(time.monotonic() - start_time)
 
     await _emit("ingest.processed", {
         "event_id": event_id,

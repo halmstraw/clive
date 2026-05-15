@@ -8,11 +8,14 @@ Confidence signal is retrieval quality only (D-047).
 v0.3: query.response payload now includes chunk_ids (list of chunk UUIDs
 returned in this retrieval). Block 18 (Feedback) uses this to tag the
 specific chunks that were poor quality.
+
+v0.5: prometheus_client instrumentation added (D-122 Phase 2).
 """
 
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from typing import Any
 
@@ -22,6 +25,7 @@ import structlog
 from . import context as ctx
 from . import llm
 from .idempotency import cache
+from .metrics import queries_total, query_duration_seconds, retrieval_chunks_returned_total
 
 log = structlog.get_logger()
 
@@ -89,16 +93,22 @@ async def handle_query(event: dict[str, Any]) -> None:
     5. Call LLM (D-077)
     6. Emit query.response (with chunk_ids for Block 18, v0.3)
     """
+    start_time = time.monotonic()
+
     event_id = uuid.UUID(event["event_id"])
     conversation_id = uuid.UUID(event["conversation_id"])
     user_input = event["input_text"]
     zone_scope = event.get("zone_scope", "personal")
+
+    # Increment query counter (D-122 Phase 2)
+    queries_total.inc()
 
     # 1. Idempotency check — D-046
     cached = cache.get(conversation_id, event_id)
     if cached:
         log.info("idempotency_cache_hit", event_id=str(event_id))
         await _emit_event("query.response", {**cached, "conversation_id": str(conversation_id)})
+        query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
     # 2. Check for action intent — D-045
@@ -128,6 +138,7 @@ async def handle_query(event: dict[str, Any]) -> None:
         }
         cache.set(conversation_id, event_id, response_payload)
         await _emit_event("query.response", {**response_payload, "conversation_id": str(conversation_id)})
+        query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
     # 3. Retrieve system documents via orchestrator (D-043, D-048)
@@ -169,6 +180,10 @@ async def handle_query(event: dict[str, Any]) -> None:
     # Extract chunk_ids for Block 18 (v0.3) — list of UUIDs from this retrieval
     chunk_ids = [c["chunk_id"] for c in ranked_chunks if "chunk_id" in c]
 
+    # Accumulate retrieval chunks counter (D-122 Phase 2)
+    if ranked_chunks:
+        retrieval_chunks_returned_total.inc(len(ranked_chunks))
+
     # 5. Retrieve conversation history from event payload
     conversation_history = event.get("conversation_history", [])
 
@@ -204,6 +219,9 @@ async def handle_query(event: dict[str, Any]) -> None:
         "query.response",
         {**response_payload, "conversation_id": str(conversation_id)},
     )
+
+    # Record query duration (D-122 Phase 2)
+    query_duration_seconds.observe(time.monotonic() - start_time)
 
     log.info(
         "query_handled",

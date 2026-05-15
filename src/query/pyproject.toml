@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "httpx>=0.27",           # HTTP client for orchestrator event submission
     "aiohttp>=3.9",          # HTTP server for receiving events from Block 13
+    "prometheus-client>=0.20",  # Metrics exposition for Block 25 Phase 2 (D-122)
 ]
 
 [project.optional-dependencies]

@@ -6,6 +6,8 @@ D-025: at-least-once delivery via retry.
 D-026: per-conversation ordering via per-conversation queues.
 D-028: backpressure — reject at source when queue full, notify owner.
 D-037: alignment check before every dispatch.
+
+v0.5: clive_events_published_total counter incremented per published event (D-122).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import structlog
 from . import alignment, audit
 from .events.schema import AlignmentResult, CLIVEEvent
 from .events.taxonomy import ALIGNMENT_REJECTED, DELIVERY_FAILED, SYSTEM_OVERRIDE_ACTIVE
+from .metrics import events_published_total
 from .retry import DELIVERY_FAILED as RETRY_FAILED, with_retry
 
 log = structlog.get_logger()
@@ -73,7 +76,10 @@ class EventBus:
             await self._emit_rejection(event, result)
             return
 
-        # 3. Queue for ordered delivery
+        # 3. Increment publish counter (D-122 Phase 2)
+        events_published_total.labels(event_type=event.event_type).inc()
+
+        # 4. Queue for ordered delivery
         queue_key = str(event.conversation_id) if event.conversation_id else "_system"
         await self._enqueue(queue_key, event)
 

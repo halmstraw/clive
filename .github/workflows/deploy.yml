@@ -146,6 +146,14 @@ jobs:
           docker compose -f infrastructure/compose/docker-compose.yml \
             run --rm seed
 
+      - name: Fix compose directory ownership
+        run: |
+          # clive has no sudo but can run docker — alpine as root can chown the tree.
+          # Must run before any cp to /home/clive/compose/ to avoid permission denied.
+          docker run --rm \
+            -v /home/clive/compose:/target \
+            alpine chown -R "$(id -u):$(id -g)" /target
+
       - name: Sync compose file to /home/clive/compose
         run: |
           cp infrastructure/compose/docker-compose.yml \
@@ -153,12 +161,6 @@ jobs:
 
       - name: Sync observability configs to /home/clive/compose/observability
         run: |
-          # Fix ownership of anything root-owned (e.g. from prior root docker runs).
-          # clive has no sudo but can run docker — alpine as root can chown the tree.
-          docker run --rm \
-            -v /home/clive/compose:/target \
-            alpine chown -R "$(id -u):$(id -g)" /target
-
           # Wipe and rebuild the entire config tree on each deploy.
           # All persistent data lives in named Docker volumes — this directory
           # holds only config files, so a full rebuild is safe and eliminates

@@ -207,6 +207,11 @@ jobs:
             up -d --pull always --no-deps orchestrator query telegram processing
 
       - name: Deploy observability and Caddy services
+        env:
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
             up -d --remove-orphans \

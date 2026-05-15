@@ -346,6 +346,22 @@ Before first deploy:
 
 ---
 
+## Working Principles
+
+1. **Don't assume. Don't hide confusion. Surface tradeoffs.**
+   If something is unclear, say so. If there are meaningful tradeoffs, name them. Never silently pick a path when the owner should choose.
+
+2. **Minimum code that solves the problem. Nothing speculative.**
+   Write exactly what is needed. Do not add abstractions, helpers, or features for hypothetical future requirements.
+
+3. **Touch only what you must. Clean up only your own mess.**
+   Scope changes to what the task requires. Do not refactor surrounding code or fix unrelated issues unless explicitly asked.
+
+4. **Define success criteria. Loop until verified.**
+   Before starting, state what done looks like. Do not report a task complete until that condition is met and confirmed.
+
+---
+
 ## What Claude Code Does Not Do in This Repo
 
 - Does not make technology choices during requirements work

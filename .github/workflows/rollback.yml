@@ -46,5 +46,8 @@ jobs:
         run: docker compose -f infrastructure/compose/docker-compose.yml ps
 
       - name: Log rollback event
+        env:
+          SHA: ${{ inputs.sha }}
+          REASON: ${{ inputs.reason }}
         run: |
-          echo "ROLLBACK: from ${{ inputs.sha }} to ${{ steps.prev.outputs.sha }}, reason: ${{ inputs.reason }}"
+          echo "ROLLBACK: from $SHA to ${{ steps.prev.outputs.sha }}, reason: $REASON"

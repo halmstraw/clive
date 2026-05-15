@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from orchestrator.retry import DELIVERY_FAILED, MAX_RETRIES, with_retry
@@ -13,6 +14,7 @@ async def test_success_on_first_attempt():
 
     async def fn():
         calls.append(1)
+        await asyncio.sleep(0)
         return "ok"
 
     result = await with_retry(fn, event_id="test", subscriber_block=8)
@@ -27,6 +29,7 @@ async def test_void_success_returns_none_not_sentinel():
     The bus checks `is DELIVERY_FAILED` so void success is not mis-flagged.
     """
     async def void_fn():
+        await asyncio.sleep(0)
         return None  # Simulates a void push function
 
     result = await with_retry(void_fn, event_id="test", subscriber_block=8)
@@ -43,6 +46,7 @@ async def test_returns_sentinel_after_exhaustion(monkeypatch):
 
     async def fn():
         calls.append(1)
+        await asyncio.sleep(0)
         raise RuntimeError("always fails")
 
     result = await with_retry(fn, event_id="test", subscriber_block=8)
@@ -59,6 +63,7 @@ async def test_succeeds_on_retry(monkeypatch):
 
     async def fn():
         calls.append(1)
+        await asyncio.sleep(0)
         if len(calls) < 3:
             raise RuntimeError("transient")
         return "ok"

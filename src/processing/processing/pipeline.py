@@ -41,6 +41,7 @@ ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080"
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
 MINIO_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "clive-raw-store")
 EMBED_BATCH_SIZE = 32
+_EVENT_INGEST_REJECTED = "ingest.rejected"
 
 
 def _get_s3_client() -> Any:
@@ -94,7 +95,7 @@ async def process(event_payload: dict[str, Any]) -> None:
         log.error("minio_fetch_failed", source_key=source_key, error=str(exc))
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {"source_key": source_key, "reason": "fetch_failed", "detail": str(exc)},
@@ -106,7 +107,7 @@ async def process(event_payload: dict[str, Any]) -> None:
         log.warning("file_too_large", source_key=source_key, size=len(raw_bytes))
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {
@@ -123,7 +124,7 @@ async def process(event_payload: dict[str, Any]) -> None:
         log.error("extraction_failed", source_key=source_key, error=str(exc))
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {"source_key": source_key, "reason": "extraction_failed", "detail": str(exc)},
@@ -134,7 +135,7 @@ async def process(event_payload: dict[str, Any]) -> None:
     if not chunks:
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {"source_key": source_key, "reason": "no_chunks_produced"},
@@ -155,7 +156,7 @@ async def process(event_payload: dict[str, Any]) -> None:
         log.error("embedding_failed", source_key=source_key, error=str(exc))
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {
@@ -179,7 +180,7 @@ async def process(event_payload: dict[str, Any]) -> None:
         log.error("chunk_write_failed", source_key=source_key, error=str(exc))
         ingest_total.labels(status="rejected").inc()
         processing_duration_seconds.observe(time.monotonic() - start_time)
-        await _emit("ingest.rejected", {
+        await _emit(_EVENT_INGEST_REJECTED, {
             "event_id": event_id,
             "conversation_id": conversation_id,
             "payload": {

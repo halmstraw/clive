@@ -30,20 +30,26 @@ load_dotenv("/etc/clive/secrets.env")
 
 log = structlog.get_logger()
 
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def handle_query_endpoint(request: web.Request) -> web.Response:
     """Receive query.received events from Block 13."""
     event = await request.json()
-    asyncio.create_task(handle_query(event))
+    _task = asyncio.create_task(handle_query(event))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
+    await asyncio.sleep(0)
     return web.json_response({"status": "ok", "block": 8})
 
 
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    await asyncio.sleep(0)
     data = generate_latest()
     return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 

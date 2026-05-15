@@ -61,12 +61,16 @@ load_dotenv("/etc/clive/secrets.env")
 
 log = structlog.get_logger()
 
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def handle_response_push(request: web.Request) -> web.Response:
     """Receive query.response events pushed from Block 13."""
     data = await request.json()
     chat_id = get_owner_chat_id()
-    asyncio.create_task(deliver_response(data, chat_id))
+    _task = asyncio.create_task(deliver_response(data, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
@@ -74,7 +78,9 @@ async def handle_alert_push(request: web.Request) -> web.Response:
     """Receive alert.triggered events pushed from Block 13."""
     data = await request.json()
     chat_id = get_owner_chat_id()
-    asyncio.create_task(deliver_alert(data, chat_id))
+    _task = asyncio.create_task(deliver_alert(data, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
@@ -83,7 +89,9 @@ async def handle_ingest_status_push(request: web.Request) -> web.Response:
     data = await request.json()
     chat_id = get_owner_chat_id()
     payload = {**data, **data.get("payload", {})}
-    asyncio.create_task(deliver_ingest_status(payload, chat_id))
+    _task = asyncio.create_task(deliver_ingest_status(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
@@ -100,7 +108,9 @@ async def handle_action_confirmation_push(request: web.Request) -> web.Response:
         chat_id_raw = get_owner_chat_id()
     chat_id = int(chat_id_raw)
     payload = {**data, **data.get("payload", {})}
-    asyncio.create_task(deliver_action_confirmation(payload, chat_id))
+    _task = asyncio.create_task(deliver_action_confirmation(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
@@ -112,7 +122,9 @@ async def handle_action_outcome_push(request: web.Request) -> web.Response:
         chat_id_raw = get_owner_chat_id()
     chat_id = int(chat_id_raw)
     payload = {**data, **data.get("payload", {})}
-    asyncio.create_task(deliver_action_outcome(payload, chat_id))
+    _task = asyncio.create_task(deliver_action_outcome(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
@@ -124,16 +136,20 @@ async def handle_deletion_result_push(request: web.Request) -> web.Response:
         chat_id_raw = get_owner_chat_id()
     chat_id = int(chat_id_raw)
     payload = {**data, **data.get("payload", {})}
-    asyncio.create_task(deliver_deletion_result(payload, chat_id))
+    _task = asyncio.create_task(deliver_deletion_result(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"})
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
+    await asyncio.sleep(0)
     return web.json_response({"status": "ok", "block": 23})
 
 
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    await asyncio.sleep(0)
     data = generate_latest()
     return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 

@@ -10,6 +10,7 @@ v0.5: added /alerts — Grafana webhook receiver; emits alert.triggered events
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import structlog
@@ -31,11 +32,13 @@ log = structlog.get_logger()
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
+    await asyncio.sleep(0)
     return web.json_response({"status": "ok", "block": 13})
 
 
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    await asyncio.sleep(0)
     data = generate_latest()
     return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 
@@ -61,7 +64,7 @@ async def handle_alerts(request: web.Request) -> web.Response:
     """
     try:
         body = await request.json()
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         log.warning("alerts_malformed_json")
         return web.json_response({"error": "invalid JSON"}, status=400)
 

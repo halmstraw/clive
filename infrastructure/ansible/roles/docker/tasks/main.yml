@@ -39,7 +39,7 @@
           "max-file": "3"
         }
       }
-    mode: "0644"
+    mode: "0640"
   notify: Restart docker
 
 - name: Enable and start Docker

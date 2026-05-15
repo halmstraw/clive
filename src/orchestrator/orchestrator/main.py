@@ -109,10 +109,7 @@ async def main() -> None:
 
     log.info("orchestrator_shutting_down")
     timeout_task.cancel()
-    try:
-        await timeout_task
-    except asyncio.CancelledError:
-        pass
+    await asyncio.gather(timeout_task, return_exceptions=True)
     await runner.cleanup()
 
 

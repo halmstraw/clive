@@ -23,6 +23,7 @@ async def test_subscriber_receives_event(bus):
     received = []
 
     async def handler(event: CLIVEEvent) -> None:
+        await asyncio.sleep(0)
         received.append(event)
 
     bus.subscribe(QUERY_RECEIVED, block_id=8, handler=handler)
@@ -43,6 +44,7 @@ async def test_alignment_failure_prevents_dispatch(bus):
     received = []
 
     async def handler(event: CLIVEEvent) -> None:
+        await asyncio.sleep(0)
         received.append(event)
 
     bus.subscribe(QUERY_RECEIVED, block_id=8, handler=handler)

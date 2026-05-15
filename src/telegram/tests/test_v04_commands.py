@@ -182,7 +182,7 @@ async def test_ingest_confirm_with_pending_uploads_and_emits():
 
     emitted_events = []
 
-    async def mock_emit(event_type, payload):
+    def mock_emit(event_type, payload):
         emitted_events.append({"event_type": event_type, **payload})
 
     with patch("clive_telegram.bot.is_authenticated", return_value=True), \

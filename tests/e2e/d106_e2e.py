@@ -76,6 +76,11 @@ AUDIT_TIMEOUT = 30    # seconds to wait for audit log entries
 # (avoids false positives from previous test runs)
 TEST_START_TS: str = ""
 
+# Shared string constants — avoids duplication across MinIO helper functions
+_MINIO_MC_IMAGE = "minio/mc"
+_EVENTS_PATH = "/events"
+_FEEDBACK_EXPLICIT = "feedback.explicit"
+
 
 # ---------------------------------------------------------------------------
 # Result tracking
@@ -187,7 +192,7 @@ def minio_pipe_upload(source_key: str, content: str) -> bool:
             "docker", "run", "--rm", "-i",
             "--network", f"container:{MINIO_CONTAINER}",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            "minio/mc", "pipe", f"local/{MINIO_BUCKET}/{source_key}",
+            _MINIO_MC_IMAGE, "pipe", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         input=content,
         capture_output=True, text=True, timeout=60,
@@ -207,7 +212,7 @@ def minio_object_gone(source_key: str) -> bool:
             "docker", "run", "--rm",
             "--network", f"container:{MINIO_CONTAINER}",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            "minio/mc", "ls", f"local/{MINIO_BUCKET}/{source_key}",
+            _MINIO_MC_IMAGE, "ls", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         capture_output=True, text=True, timeout=30,
     )
@@ -222,7 +227,7 @@ def minio_rm(source_key: str) -> None:
             "docker", "run", "--rm",
             "--network", f"container:{MINIO_CONTAINER}",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            "minio/mc", "rm", f"local/{MINIO_BUCKET}/{source_key}",
+            _MINIO_MC_IMAGE, "rm", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         capture_output=True, text=True, timeout=30,
     )
@@ -291,7 +296,7 @@ def audit_events_since_start() -> dict[str, str]:
     relevant = (
         "'action.pending','action.confirmation_requested','action.owner_response',"
         "'action.confirmed','action.rejected','deletion.complete','deletion.not_found',"
-        "'feedback.explicit'"
+        f"'{_FEEDBACK_EXPLICIT}'"
     )
     # TEST_START_TS is an ISO-8601 UTC string; PostgreSQL parses it with ::timestamptz
     ts_filter = f"AND timestamp >= '{TEST_START_TS}'::timestamptz" if TEST_START_TS else ""
@@ -376,7 +381,7 @@ def emit_action_pending(
     if description is None:
         description = f"Delete {filename} (D-106 E2E test)."
     _orchestrator_post(
-        "/events",
+        _EVENTS_PATH,
         {
             "event_type": "action.pending",
             "source_block": 23,
@@ -397,7 +402,7 @@ def emit_action_pending(
 def emit_action_owner_response(action_request_id: str, confirmed: bool) -> None:
     """POST action.owner_response to the orchestrator."""
     _orchestrator_post(
-        "/events",
+        _EVENTS_PATH,
         {
             "event_type": "action.owner_response",
             "source_block": 23,
@@ -689,9 +694,9 @@ def run_c5() -> None:
     # Step 2: emit feedback.explicit for audit trail (mirrors Block 23 bot.py _emit_to_orchestrator)
     try:
         _orchestrator_post(
-            "/events",
+            _EVENTS_PATH,
             {
-                "event_type": "feedback.explicit",
+                "event_type": _FEEDBACK_EXPLICIT,
                 "source_block": 23,
                 "event_id": str(uuid.uuid4()),
                 "conversation_id": conversation_id,
@@ -718,7 +723,7 @@ def run_c5() -> None:
     )
 
     # Step 3b: verify audit log entry
-    audit_present = wait_for_audit_event("feedback.explicit")
+    audit_present = wait_for_audit_event(_FEEDBACK_EXPLICIT)
     record("C5: feedback.explicit in audit log", audit_present)
 
 
@@ -737,7 +742,7 @@ def run_c6() -> None:
         "action.confirmed",
         "action.rejected",
         "deletion.complete",
-        "feedback.explicit",
+        _FEEDBACK_EXPLICIT,
     }
 
     found = audit_events_since_start()

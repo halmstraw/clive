@@ -3,7 +3,7 @@
   ansible.builtin.get_url:
     url: https://rclone.org/install.sh
     dest: /tmp/rclone-install.sh
-    mode: "0755"
+    mode: "0700"
 
 - name: Install rclone
   ansible.builtin.command:
@@ -36,8 +36,8 @@
   ansible.builtin.copy:
     dest: /usr/local/bin/clive-backup
     owner: root
-    group: root
-    mode: "0755"
+    group: clive
+    mode: "0750"
     content: |
       #!/bin/bash
       set -euo pipefail

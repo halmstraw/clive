@@ -23,14 +23,14 @@ def test_compute_confidence_above_threshold():
     result = _compute_confidence(chunks)
     assert result["threshold_met"] is True
     assert result["chunks_returned"] == 2
-    assert result["highest_relevance_score"] == 0.8
+    assert result["highest_relevance_score"] == pytest.approx(0.8)
 
 
 def test_compute_confidence_empty():
     result = _compute_confidence([])
     assert result["threshold_met"] is False
     assert result["chunks_returned"] == 0
-    assert result["highest_relevance_score"] == 0.0
+    assert result["highest_relevance_score"] == pytest.approx(0.0)
 
 
 def test_compute_confidence_below_threshold():

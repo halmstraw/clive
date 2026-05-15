@@ -55,7 +55,7 @@ async def test_deletion_not_found_emits_not_found_event(mock_pool_with_rows):
 
     posted_events = []
 
-    async def mock_post(url, json, timeout):  # noqa: ARG001
+    def mock_post(url, json, **kwargs):  # noqa: ARG001
         posted_events.append(json)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
@@ -87,7 +87,7 @@ async def test_deletion_found_emits_complete_event(mock_pool_with_rows):
 
     posted_events = []
 
-    async def mock_post(url, json, timeout):  # noqa: ARG001
+    def mock_post(url, json, **kwargs):  # noqa: ARG001
         posted_events.append(json)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
@@ -121,7 +121,7 @@ async def test_deletion_idempotent_zero_chunks(mock_pool_with_rows):
 
     posted_events = []
 
-    async def mock_post(url, json, timeout):  # noqa: ARG001
+    def mock_post(url, json, **kwargs):  # noqa: ARG001
         posted_events.append(json)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
@@ -155,7 +155,7 @@ async def test_deletion_minio_failure_does_not_abort(mock_pool_with_rows):
 
     posted_events = []
 
-    async def mock_post(url, json, timeout):  # noqa: ARG001
+    def mock_post(url, json, **kwargs):  # noqa: ARG001
         posted_events.append(json)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
@@ -192,7 +192,7 @@ async def test_deletion_complete_includes_provenance(mock_pool_with_rows):
     action_request_id = str(uuid.uuid4())
     posted_events = []
 
-    async def mock_post(url, json, timeout):  # noqa: ARG001
+    def mock_post(url, json, **kwargs):  # noqa: ARG001
         posted_events.append(json)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()

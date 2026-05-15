@@ -27,6 +27,8 @@ load_dotenv("/etc/clive/secrets.env")
 
 log = structlog.get_logger()
 
+_background_tasks: set[asyncio.Task] = set()
+
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
 
 
@@ -38,7 +40,9 @@ async def handle_ingest(request: web.Request) -> web.Response:
     for key in ("source_key", "content_type", "conversation_id", "original_filename", "file_size", "chat_id"):
         if key in data and key not in payload:
             payload[key] = data[key]
-    asyncio.create_task(process(payload))
+    _task = asyncio.create_task(process(payload))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"}, status=202)
 
 
@@ -51,16 +55,20 @@ async def handle_delete(request: web.Request) -> web.Response:
     """
     data = await request.json()
     payload = {**data.get("payload", {}), **data}
-    asyncio.create_task(execute_deletion(payload, ORCHESTRATOR_URL))
+    _task = asyncio.create_task(execute_deletion(payload, ORCHESTRATOR_URL))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
     return web.json_response({"status": "accepted"}, status=202)
 
 
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
+    await asyncio.sleep(0)
     return web.json_response({"status": "ok", "block": 15})
 
 
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
+    await asyncio.sleep(0)
     data = generate_latest()
     return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 

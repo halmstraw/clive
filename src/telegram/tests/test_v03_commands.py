@@ -143,7 +143,7 @@ async def test_cancel_delete_with_pending_emits_rejected():
 
     emitted_events = []
 
-    async def mock_emit(event_type, payload):
+    def mock_emit(event_type, payload):
         emitted_events.append({"event_type": event_type, **payload})
 
     with patch("clive_telegram.bot.is_authenticated", return_value=True), \
@@ -223,7 +223,7 @@ async def test_bad_persists_feedback_and_acknowledges():
 
     emitted_events = []
 
-    async def mock_emit(event_type, payload):
+    def mock_emit(event_type, payload):
         emitted_events.append({"event_type": event_type, **payload})
 
     with patch("clive_telegram.bot.is_authenticated", return_value=True), \
@@ -254,7 +254,7 @@ async def test_bad_persists_feedback_and_acknowledges():
 async def test_bad_db_failure_replies_error(mock_bot_app):
     """If DB write fails, /bad must reply with error — not crash silently."""
     import clive_telegram.bot as bot_module
-    _, mock_send = mock_bot_app
+    _ = mock_bot_app
 
     bot_module._last_retrieval[99] = {
         "event_id": str(uuid.uuid4()),
@@ -330,8 +330,6 @@ async def test_deliver_deletion_result_complete(mock_bot_app):
     )
 
     mock_send.assert_called_once()
-    text = mock_send.call_args.kwargs.get("text", "") or mock_send.call_args[0][0] if mock_send.call_args[0] else ""
-    # Accept either positional or keyword 'text'
     all_args = str(mock_send.call_args)
     assert "report.pdf" in all_args
     assert "7" in all_args or "Deleted" in all_args

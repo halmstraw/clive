@@ -12,7 +12,7 @@
     url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
     dest: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
     checksum: "{{ runner_checksum }}"
-    mode: "0644"
+    mode: "0600"
 
 - name: Extract runner archive
   ansible.builtin.unarchive:

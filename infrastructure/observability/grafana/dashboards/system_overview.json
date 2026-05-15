@@ -423,8 +423,7 @@
           "refId": "B"
         }
       ]
-    }
-  ],
+    },
     {
       "datasource": {
         "type": "loki",

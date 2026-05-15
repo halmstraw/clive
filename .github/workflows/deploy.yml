@@ -86,6 +86,9 @@ jobs:
           AUDIT_WRITER_PASSWORD: ${{ secrets.AUDIT_WRITER_PASSWORD }}
           MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           {
             echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
@@ -100,6 +103,9 @@ jobs:
             echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}"
             echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
             echo "MINIO_ENDPOINT=http://minio:9000"
+            echo "GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}"
+            echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
+            echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
           } > /etc/clive/secrets.env
           chmod 600 /etc/clive/secrets.env
 
@@ -145,6 +151,46 @@ jobs:
           cp infrastructure/compose/docker-compose.yml \
             /home/clive/compose/docker-compose.yml
 
+      - name: Sync observability configs to /home/clive/compose/observability
+        run: |
+          # Ensure all directories exist
+          mkdir -p \
+            /home/clive/compose/observability/prometheus/rules \
+            /home/clive/compose/observability/loki \
+            /home/clive/compose/observability/promtail \
+            /home/clive/compose/observability/grafana/provisioning/datasources \
+            /home/clive/compose/observability/grafana/provisioning/dashboards \
+            /home/clive/compose/observability/grafana/provisioning/alerting \
+            /home/clive/compose/observability/grafana/dashboards \
+            /home/clive/compose/observability/caddy
+          # Remove any paths incorrectly created as directories by a prior Ansible run
+          for f in \
+            /home/clive/compose/observability/loki/config.yml \
+            /home/clive/compose/observability/prometheus/prometheus.yml \
+            /home/clive/compose/observability/promtail/config.yml \
+            /home/clive/compose/observability/caddy/Caddyfile; do
+            [ -d "$f" ] && rm -rf "$f" || true
+          done
+          cp infrastructure/observability/prometheus/prometheus.yml \
+            /home/clive/compose/observability/prometheus/
+          cp infrastructure/observability/prometheus/rules/services.yml \
+            infrastructure/observability/prometheus/rules/system.yml \
+            /home/clive/compose/observability/prometheus/rules/
+          cp infrastructure/observability/loki/config.yml \
+            /home/clive/compose/observability/loki/
+          cp infrastructure/observability/promtail/config.yml \
+            /home/clive/compose/observability/promtail/
+          cp infrastructure/observability/grafana/provisioning/datasources/datasources.yml \
+            /home/clive/compose/observability/grafana/provisioning/datasources/
+          cp infrastructure/observability/grafana/provisioning/dashboards/dashboards.yml \
+            /home/clive/compose/observability/grafana/provisioning/dashboards/
+          cp infrastructure/observability/grafana/provisioning/alerting/contact_points.yml \
+            /home/clive/compose/observability/grafana/provisioning/alerting/
+          cp infrastructure/observability/grafana/dashboards/system_overview.json \
+            /home/clive/compose/observability/grafana/dashboards/
+          cp infrastructure/observability/caddy/Caddyfile \
+            /home/clive/compose/observability/caddy/
+
       - name: Deploy services
         env:
           ORCHESTRATOR_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
@@ -154,6 +200,12 @@ jobs:
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
             up -d --pull always --no-deps orchestrator query telegram processing
+
+      - name: Deploy observability and Caddy services
+        run: |
+          docker compose -f infrastructure/compose/docker-compose.yml \
+            up -d --no-recreate \
+            caddy prometheus loki promtail grafana node-exporter postgres-exporter cadvisor
 
   verify:
     name: Verify deployment

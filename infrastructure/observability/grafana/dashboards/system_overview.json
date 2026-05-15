@@ -203,13 +203,13 @@
         },
         "textMode": "auto"
       },
-      "title": "Running Containers",
+      "title": "Healthy Services",
       "type": "stat",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "count(container_last_seen{name=~\"clive-.*\"})",
-          "legendFormat": "Containers",
+          "expr": "count(up == 1)",
+          "legendFormat": "Up",
           "refId": "A"
         }
       ]
@@ -353,14 +353,20 @@
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "none" }
       },
-      "title": "Container CPU Usage (clive services)",
+      "title": "Disk I/O",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"clive-.*\"}[2m])) by (name) * 100",
-          "legendFormat": "{{ name }}",
+          "expr": "rate(node_disk_read_bytes_total{device!~\"loop.*\"}[2m])",
+          "legendFormat": "{{ device }} read",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "rate(node_disk_written_bytes_total{device!~\"loop.*\"}[2m])",
+          "legendFormat": "{{ device }} write",
+          "refId": "B"
         }
       ]
     },
@@ -401,14 +407,20 @@
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "none" }
       },
-      "title": "Container Memory Usage (clive services)",
+      "title": "Network I/O",
       "type": "timeseries",
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "container_memory_usage_bytes{name=~\"clive-.*\"}",
-          "legendFormat": "{{ name }}",
+          "expr": "rate(node_network_receive_bytes_total{device!~\"lo\"}[2m])",
+          "legendFormat": "{{ device }} rx",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "rate(node_network_transmit_bytes_total{device!~\"lo\"}[2m])",
+          "legendFormat": "{{ device }} tx",
+          "refId": "B"
         }
       ]
     }

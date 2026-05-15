@@ -153,13 +153,17 @@ jobs:
 
       - name: Sync observability configs to /home/clive/compose/observability
         run: |
-          # Fix ownership of any dirs created as root (e.g. by a prior root docker run).
+          # Fix ownership of anything root-owned (e.g. from prior root docker runs).
           # clive has no sudo but can run docker — alpine as root can chown the tree.
           docker run --rm \
             -v /home/clive/compose:/target \
             alpine chown -R "$(id -u):$(id -g)" /target
 
-          # Ensure config directories exist (now clive-owned, mkdir will succeed)
+          # Wipe and rebuild the entire config tree on each deploy.
+          # All persistent data lives in named Docker volumes — this directory
+          # holds only config files, so a full rebuild is safe and eliminates
+          # the file-vs-directory confusion caused by prior Docker runs.
+          rm -rf /home/clive/compose/observability
           mkdir -p \
             /home/clive/compose/observability/prometheus/rules \
             /home/clive/compose/observability/loki \
@@ -169,15 +173,6 @@ jobs:
             /home/clive/compose/observability/grafana/provisioning/alerting \
             /home/clive/compose/observability/grafana/dashboards \
             /home/clive/compose/observability/caddy
-
-          # Remove any paths incorrectly created as directories by a prior Ansible run
-          for f in \
-            /home/clive/compose/observability/loki/config.yml \
-            /home/clive/compose/observability/prometheus/prometheus.yml \
-            /home/clive/compose/observability/promtail/config.yml \
-            /home/clive/compose/observability/caddy/Caddyfile; do
-            [ -d "$f" ] && rm -rf "$f" || true
-          done
 
           cp infrastructure/observability/prometheus/prometheus.yml \
             /home/clive/compose/observability/prometheus/

@@ -24,7 +24,6 @@ jobs:
         env:
           TF_VAR_hcloud_token: ${{ secrets.HETZNER_API_TOKEN }}
           TF_VAR_ssh_public_key: ${{ secrets.CLIVE_SSH_PUBLIC_KEY }}
-          TF_VAR_owner_ip: ${{ secrets.OWNER_IP }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
         run: |
@@ -48,7 +47,6 @@ jobs:
         env:
           TF_VAR_hcloud_token: ${{ secrets.HETZNER_API_TOKEN }}
           TF_VAR_ssh_public_key: ${{ secrets.CLIVE_SSH_PUBLIC_KEY }}
-          TF_VAR_owner_ip: ${{ secrets.OWNER_IP }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
         run: |

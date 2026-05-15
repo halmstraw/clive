@@ -51,7 +51,7 @@ resource "hcloud_firewall" "clive" {
     direction  = "in"
     protocol   = "tcp"
     port       = "22"
-    source_ips = ["${var.owner_ip}/32"]
+    source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   # D-121: HTTP — required for Caddy ACME challenge and HTTP→HTTPS redirect

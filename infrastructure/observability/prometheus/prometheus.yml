@@ -10,8 +10,28 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  # Application services — Block 25 Phase 2 (D-122)
+  - job_name: 'clive-orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8080']
+    metrics_path: /metrics
+
+  - job_name: 'clive-query'
+    static_configs:
+      - targets: ['query:8081']
+    metrics_path: /metrics
+
+  - job_name: 'clive-telegram'
+    static_configs:
+      - targets: ['telegram:8082']
+    metrics_path: /metrics
+
+  - job_name: 'clive-processing'
+    static_configs:
+      - targets: ['processing:8083']
+    metrics_path: /metrics
+
   # Infrastructure exporters — Block 25 Phase 1 (D-117)
-  # Application service metrics (Block 25 Phase 2, D-122) — not yet implemented
   - job_name: 'postgres'
     static_configs:
       - targets: ['postgres-exporter:9187']

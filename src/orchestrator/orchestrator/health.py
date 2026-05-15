@@ -37,7 +37,7 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
     data = generate_latest()
-    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
+    return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 async def handle_event_intake(request: web.Request) -> web.Response:

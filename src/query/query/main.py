@@ -10,6 +10,7 @@ For v0.1 simplicity: Block 13 pushes query.received events to
 Block 8 via HTTP POST to /query endpoint.
 
 v0.5: /metrics endpoint added for Prometheus scraping (D-122 Phase 2).
+v0.6: DB pool initialised on startup for LLM usage tracking (D-125).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from aiohttp import web
 from dotenv import load_dotenv
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from . import db as query_db
 from .handler import handle_query
 
 load_dotenv("/etc/clive/secrets.env")
@@ -43,11 +45,14 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
 async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
     """Expose Prometheus metrics for scraping (D-122 Phase 2)."""
     data = generate_latest()
-    return web.Response(body=data, content_type=CONTENT_TYPE_LATEST)
+    return web.Response(body=data, headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 async def main() -> None:
     log.info("query_service_starting", block=8)
+
+    # Initialise DB pool for LLM usage tracking (D-125, v0.6)
+    await query_db.init_pool()
 
     app = web.Application()
     app.router.add_post("/query", handle_query_endpoint)

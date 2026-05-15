@@ -201,6 +201,12 @@ services:
       - loki_data:/loki
       - /home/clive/compose/observability/loki:/etc/loki/conf:ro
     command: -config.file=/etc/loki/conf/config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     mem_limit: 512m
     networks:
       - clive-internal

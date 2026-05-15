@@ -229,6 +229,8 @@ jobs:
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
+          # Wait for slow-starting services (e.g. Loki ~14s) before checking state.
+          sleep 30
           docker compose -f infrastructure/compose/docker-compose.yml ps --format json \
           | python3 -c '
           import json, sys

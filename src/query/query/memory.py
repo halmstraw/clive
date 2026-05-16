@@ -20,6 +20,11 @@ a safe default ([] for retrieval, None for storage/consolidation).
 
 Memory retrieval is internal to Block 8 — no new events required (D-003).
 Direct DB access is consistent with the llm_usage write pattern established at v0.6.
+
+asyncpg pgvector note: asyncpg has no built-in pgvector codec.
+Embeddings (list[float]) must be converted to str() before passing as
+a $N::vector SQL parameter — same pattern as processing/store.py.
+str([1.0, 2.0, ...]) produces "[1.0, 2.0, ...]" which pgvector parses correctly.
 """
 
 from __future__ import annotations
@@ -60,6 +65,8 @@ async def retrieve_entities(
     """
     try:
         pool = get_pool()
+        # asyncpg has no pgvector codec — convert list to str before passing
+        embedding_str = str(query_embedding)
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -73,7 +80,7 @@ async def retrieve_entities(
                 ORDER  BY embedding <=> $1::vector
                 LIMIT  $2
                 """,
-                query_embedding,
+                embedding_str,
                 top_k,
             )
         return [
@@ -115,6 +122,8 @@ async def store_entities(
         pool = get_pool()
         async with pool.acquire() as conn:
             for entity, embedding in zip(entities, embeddings):
+                # asyncpg has no pgvector codec — convert list to str before passing
+                embedding_str = str(embedding)
                 await conn.execute(
                     """
                     INSERT INTO clive_state.memory_entities
@@ -125,7 +134,7 @@ async def store_entities(
                     entity["key"],
                     entity["value"],
                     source_turn_id,
-                    embedding,
+                    embedding_str,
                 )
         log.info("memory_entities_stored", count=len(entities))
     except Exception as exc:
@@ -228,6 +237,8 @@ async def consolidate_if_needed(
         summary_text, summary_embedding = await llm_summarise(turn_text)
 
         # Step 3: Persist summary and delete raw turns (second connection)
+        # asyncpg has no pgvector codec — convert list to str before passing
+        summary_embedding_str = str(summary_embedding)
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -241,7 +252,7 @@ async def consolidate_if_needed(
                 min(turn_numbers),
                 max(turn_numbers),
                 len(rows),
-                summary_embedding,
+                summary_embedding_str,
             )
             await conn.execute(
                 "DELETE FROM clive_state.conversation_turns WHERE turn_id = ANY($1::uuid[])",

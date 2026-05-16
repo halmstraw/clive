@@ -248,3 +248,19 @@ jobs:
           psql -h localhost -U postgres -d clive -c \
             "SET ROLE clive_app; \
              SELECT count(*) FROM clive_state.feedback;"
+
+      - name: Assert clive_app can access memory_entities (v0.7, D-128)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.memory_entities;"
+
+      - name: Assert clive_app can access conversation_summaries (v0.7, D-128)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.conversation_summaries;"

@@ -76,6 +76,12 @@ SECURITY_ANOMALY_DETECTED = "security.anomaly.detected"
 # v0.7 — Block 9 Action Layer: web search and reminder action types
 REMINDER_FIRED = "reminder.fired"       # orchestrator polling → Block 23
 
+# v0.8 — Block 17 Tool Registry admin events (D-137)
+ADMIN_TOOL_DISABLE = "admin.tool_disable"   # Block 23 → Block 13
+ADMIN_TOOL_ENABLE = "admin.tool_enable"     # Block 23 → Block 13
+ADMIN_TOOL_UPDATED = "admin.tool_updated"   # Block 13 → Block 23
+ADMIN_TOOL_ERROR = "admin.tool_error"       # Block 13 → Block 23
+
 # Orchestrator-emitted
 ALIGNMENT_REJECTED = "alignment.rejected"
 DELIVERY_FAILED = "delivery.failed"

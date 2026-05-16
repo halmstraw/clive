@@ -8,6 +8,8 @@ v0.3: Block 9 (Action Layer) added — wires action event lifecycle.
 v0.6: cost.cap_exceeded subscriber added (D-125, Block 20).
 v0.7: action.confirmed dispatcher routes by action_type; reminder polling added.
 v0.8: structlog configured for JSON output — enables Loki field extraction (D-131).
+v0.8: Tool registry gate added — action.pending validated against Block 17 registry
+      before dispatch to Block 9 (D-137). Admin tool enable/disable handlers wired.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-from . import action, audit, reminder_handler, retrieval, search_handler
+from . import action, audit, registry, reminder_handler, retrieval, search_handler
 from .bus import bus
 from .events.schema import CLIVEEvent
 from .events.taxonomy import (
@@ -44,6 +46,10 @@ from .events.taxonomy import (
     ACTION_OWNER_RESPONSE,
     ACTION_PENDING,
     ACTION_REJECTED,
+    ADMIN_TOOL_DISABLE,
+    ADMIN_TOOL_ENABLE,
+    ADMIN_TOOL_ERROR,
+    ADMIN_TOOL_UPDATED,
     ALERT_TRIGGERED,
     COST_CAP_EXCEEDED,
     DELETION_COMPLETE,
@@ -57,6 +63,7 @@ from .events.taxonomy import (
 from .health import start_health_server
 from .push import (
     push_action_outcome_to_surface,
+    push_admin_tool_result_to_surface,
     push_alert_to_surface,
     push_confirmed_to_deletion,
     push_confirmation_to_surface,
@@ -100,6 +107,9 @@ async def main() -> None:
     await action.init_pool()          # Block 9 — Action Layer (v0.3)
     await reminder_handler.init_pool()  # Block 9 — Reminder handler (v0.7)
 
+    # v0.8: bind registry gate to action pool — no new pool created (D-137).
+    registry.set_pool(action._pool)
+
     # Register push subscribers — Block 8 query
     bus.subscribe(QUERY_RECEIVED, block_id=8, handler=push_query_to_block8)
     bus.subscribe(QUERY_RESPONSE, block_id=23, handler=push_response_to_surface)
@@ -111,7 +121,14 @@ async def main() -> None:
     bus.subscribe(INGEST_REJECTED, block_id=23, handler=push_ingest_status_to_surface)
 
     # Block 9 — Action Layer (v0.3 + v0.7, D-006)
-    bus.subscribe(ACTION_PENDING, block_id=9, handler=action.handle_action_pending)
+    # v0.8: action.pending is wrapped with the tool registry gate (D-137).
+    # The gate queries clive_state.tool_registry and emits action.rejected for
+    # unregistered, disabled, or deprecated tools before Block 9 sees the event.
+    bus.subscribe(
+        ACTION_PENDING,
+        block_id=9,
+        handler=registry.make_gated_handler(action.handle_action_pending),
+    )
     bus.subscribe(ACTION_CONFIRMATION_REQUESTED, block_id=23, handler=push_confirmation_to_surface)
     bus.subscribe(ACTION_OWNER_RESPONSE, block_id=9, handler=action.handle_action_owner_response)
     # v0.7: single dispatcher replaces direct push_confirmed_to_deletion subscription
@@ -122,6 +139,15 @@ async def main() -> None:
 
     # Block 20 — Cost cap notification (v0.6, D-125)
     bus.subscribe(COST_CAP_EXCEEDED, block_id=23, handler=push_cost_cap_notification_to_surface)
+
+    # v0.8 — Block 17 / Block 19: Tool registry admin events (D-137)
+    # Block 23 emits admin.tool_disable / admin.tool_enable after owner confirmation.
+    # Block 13 handles them and emits admin.tool_updated / admin.tool_error.
+    # Those result events are routed back to Block 23 as owner notifications.
+    bus.subscribe(ADMIN_TOOL_DISABLE, block_id=13, handler=registry.handle_tool_disable)
+    bus.subscribe(ADMIN_TOOL_ENABLE, block_id=13, handler=registry.handle_tool_enable)
+    bus.subscribe(ADMIN_TOOL_UPDATED, block_id=23, handler=push_admin_tool_result_to_surface)
+    bus.subscribe(ADMIN_TOOL_ERROR, block_id=23, handler=push_admin_tool_result_to_surface)
 
     # Start health + API server
     runner = await start_health_server()

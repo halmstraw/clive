@@ -15,6 +15,9 @@ Failures are logged and non-fatal — query proceeds without history.
 
 v0.6 (D-125): push_cost_cap_notification_to_surface added — routes
 cost.cap_exceeded event to Block 23 as an owner alert (D-003 compliant).
+
+v0.8 (D-137): push_admin_tool_result_to_surface added — routes
+admin.tool_updated and admin.tool_error to Block 23 as owner notifications.
 """
 
 from __future__ import annotations
@@ -253,6 +256,44 @@ async def push_cost_cap_notification_to_surface(event: CLIVEEvent) -> None:
                     "CLIVE will not make further LLM calls today. "
                     "Cap resets at midnight UTC."
                 ),
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
+
+# ---------------------------------------------------------------------------
+# Block 17 / Block 19 — Tool registry admin notifications (v0.8, D-137)
+# ---------------------------------------------------------------------------
+
+async def push_admin_tool_result_to_surface(event: CLIVEEvent) -> None:
+    """Push admin.tool_updated or admin.tool_error to Block 23 as an owner notification.
+
+    D-003: Block 13 emits these events after processing admin.tool_disable /
+    admin.tool_enable. Block 23 receives them via the /alert endpoint.
+    No direct Block 13 → Block 23 call outside the event bus.
+    """
+    if event.event_type == "admin.tool_updated":
+        tool_name = event.payload.get("tool_name", "")
+        action = event.payload.get("action", "")
+        title = f"Tool {action}"
+        body = f"Tool '{tool_name}' {action} successfully."
+        severity = "info"
+    else:  # admin.tool_error
+        tool_name = event.payload.get("tool_name", "")
+        reason = event.payload.get("reason", "unknown")
+        title = "Tool admin error"
+        body = f"Tool admin error for '{tool_name}': {reason}."
+        severity = "warn"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{TELEGRAM_URL}/alert",
+            json={
+                "event_id": str(event.event_id),
+                "severity": severity,
+                "title": title,
+                "body": body,
             },
             timeout=10.0,
         )

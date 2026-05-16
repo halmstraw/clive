@@ -16,6 +16,13 @@ v0.6: Block 20 spend cap gate and LLM usage recording (D-125).
   - If cap exceeded: return canned response, emit cost.cap_exceeded, no LLM call.
   - After each LLM call: record model/tokens/cost to clive_state.llm_usage.
   - Prometheus: increment clive_llm_tokens_total and clive_llm_cost_usd_total.
+
+v0.7: Block 11 full cross-session memory (D-128).
+  - After spend cap check: embed query, retrieve top-5 memory entities (AC-3).
+  - Memory entities injected as Tier 3.5 in context assembly (AC-4).
+  - Post-response: extract entities from turn, store with embeddings (AC-2).
+  - Post-response: run consolidation if turn count/age threshold met (AC-5).
+  - All memory operations are non-fatal (caught exceptions → graceful degradation).
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ import structlog
 
 from . import context as ctx
 from . import llm
+from . import memory
 from .idempotency import cache
 from .metrics import (
     llm_cost_cap_exceeded_total,
@@ -101,15 +109,23 @@ def _compute_confidence(
 async def handle_query(event: dict[str, Any]) -> None:
     """Handle a query.received event.
 
-    1. Check idempotency cache (D-046)
-    2. Check for action intent (D-045)
-    3. Retrieve system documents via orchestrator (D-043, D-048)
-    4. Retrieve knowledge chunks via orchestrator (D-043)
-    5. Check daily spend cap — return canned response if exceeded (D-125, D-006)
-    6. Assemble context (D-044)
-    7. Call LLM (D-077)
-    8. Record LLM usage to clive_state.llm_usage (D-125)
-    9. Emit query.response (with chunk_ids for Block 18, v0.3)
+    Steps:
+    1.  Idempotency check (D-046)
+    2.  Action intent check (D-045)
+    3.  Retrieve system documents via orchestrator (D-043, D-048)
+    4.  Retrieve knowledge chunks via orchestrator (D-043)
+    5.  Retrieve conversation history from event payload
+    6.  Spend cap check — return canned response if exceeded (D-125)
+    7.  Semantic memory retrieval (v0.7, D-128, AC-3)
+    8.  Assemble context (D-044) — includes memory entities as Tier 3.5
+    9.  Call LLM (D-077)
+    10. Record LLM usage to clive_state.llm_usage (D-125)
+    11. Build response payload, cache, emit query.response (v0.3: include chunk_ids)
+    12. Record query duration (D-122 Phase 2)
+    13. Post-response memory operations (v0.7, D-128) — non-fatal:
+        a. Extract entities from the turn (AC-2)
+        b. Store entities with embeddings (AC-2)
+        c. Consolidate old turns if threshold met (AC-5)
     """
     start_time = time.monotonic()
 
@@ -254,24 +270,43 @@ async def handle_query(event: dict[str, Any]) -> None:
             query_duration_seconds.observe(time.monotonic() - start_time)
             return
 
-    # 7. Assemble context (D-044)
+    # 7. Semantic memory retrieval — v0.7, D-128, AC-3
+    # Embed the query and search clive_state.memory_entities by cosine similarity.
+    # Non-fatal: any failure produces [] and query continues without memory.
+    memory_entities_retrieved: list[dict[str, Any]] = []
+    try:
+        query_embedding = await llm.embed(user_input)
+        memory_entities_retrieved = await memory.retrieve_entities(
+            query_embedding, top_k=5
+        )
+        if memory_entities_retrieved:
+            log.info(
+                "memory_entities_retrieved",
+                count=len(memory_entities_retrieved),
+            )
+    except Exception as exc:
+        log.warning("memory_retrieval_skipped", error=str(exc))
+
+    # 8. Assemble context (D-044) — memory entities injected as Tier 3.5 (D-128)
     assembled = ctx.assemble(
         personality=personality_doc,
         alignment_rules=alignment_doc,
         conversation_history=conversation_history,
         retrieved_chunks=ranked_chunks,
+        memory_entities=memory_entities_retrieved,
     )
 
-    # 8. Call LLM (D-077) — returns (text, usage_data) since v0.6
+    # 9. Call LLM (D-077) — returns (text, usage_data) since v0.6
     response_text, usage_data = await llm.complete(
         personality=assembled.personality,
         alignment_rules=assembled.alignment_rules,
         conversation_history=assembled.conversation_history,
         retrieved_chunks=assembled.retrieved_chunks,
         user_query=user_input,
+        memory_entities=assembled.memory_entities,
     )
 
-    # 9. Record usage to clive_state.llm_usage (D-125)
+    # 10. Record usage to clive_state.llm_usage (D-125)
     cost_usd = compute_cost(
         usage_data["model"],
         usage_data["prompt_tokens"],
@@ -290,7 +325,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     llm_tokens_total.labels(model=model_label, type="completion").inc(usage_data["completion_tokens"])
     llm_cost_usd_total.labels(model=model_label).inc(cost_usd)
 
-    # 10. Build response and cache it
+    # 11. Build response and cache it
     # chunk_ids included so Block 18 can tag specific chunks as poor quality
     response_payload = {
         "event_id": str(event_id),
@@ -300,7 +335,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     }
     cache.set(conversation_id, event_id, response_payload)
 
-    # 11. Emit query.response
+    # 12. Emit query.response
     await _emit_event(
         _EVENT_QUERY_RESPONSE,
         {**response_payload, "conversation_id": str(conversation_id)},
@@ -313,7 +348,29 @@ async def handle_query(event: dict[str, Any]) -> None:
         "query_handled",
         event_id=str(event_id),
         chunks_used=len(assembled.retrieved_chunks),
+        memory_entities_used=len(assembled.memory_entities),
         threshold_met=confidence["threshold_met"],
         cost_usd=cost_usd,
         model=model_label,
     )
+
+    # 13. Post-response memory operations — v0.7, D-128
+    # These run after query.response has been emitted. Non-fatal throughout.
+    # a. Extract entities from the completed turn.
+    # b. Store entities with embeddings in clive_state.memory_entities.
+    # c. Consolidate old turns if threshold triggered.
+    try:
+        entities = await llm.extract_entities(user_input, response_text)
+        if entities:
+            entity_values = [e["value"] for e in entities]
+            embeddings = await llm.embed_batch(entity_values)
+            await memory.store_entities(
+                entities,
+                source_turn_id=None,   # turn_id not available here; orchestrator owns turn writes
+                embeddings=embeddings,
+            )
+        await memory.consolidate_if_needed(conversation_id, llm.summarise_turns)
+    except Exception as exc:
+        # Any failure in memory operations is non-fatal.
+        # The response has already been delivered.
+        log.warning("post_response_memory_failed", error=str(exc))

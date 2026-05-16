@@ -4,8 +4,8 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-126
-Last updated: 2026-05-15
+Last decision ID: D-129
+Last updated: 2026-05-16
 
 | ID | Title | Status | Date | Blocks | File |
 |----|-------|--------|------|--------|------|
@@ -135,3 +135,6 @@ Last updated: 2026-05-15
 | D-124 | CLIVE v0.5 signed off — all seven criteria met 15 May 2026 | Accepted | 2026-05-15 | All blocks | [D-124-v05-signed-off.md](docs/decisions/D-124-v05-signed-off.md) |
 | D-125 | CLIVE v0.6 scope approved — Block 20 (Cost/Rate Management) | Accepted | 2026-05-15 | Block 20, Block 8, Block 13, Block 16, Block 23, Block 25, Block 27, Block 28 | [D-125-v06-scope-approved.md](docs/decisions/D-125-v06-scope-approved.md) |
 | D-126 | CLIVE v0.6 acceptance criteria defined — seven criteria for Block 20 complete delivery | Accepted | 2026-05-15 | Block 20, Block 8, Block 13, Block 16, Block 23, Block 25, Block 28 | [D-126-v06-acceptance-criteria.md](docs/decisions/D-126-v06-acceptance-criteria.md) |
+| D-127 | CLIVE v0.6 signed off — all seven criteria met 16 May 2026 | Accepted | 2026-05-16 | All blocks | [D-127-v06-signed-off.md](docs/decisions/D-127-v06-signed-off.md) |
+| D-128 | CLIVE v0.7 scope approved — Block 11 full cross-session memory | Accepted | 2026-05-16 | Block 8, Block 11, Block 16 | [D-128-v07-scope.md](docs/decisions/D-128-v07-scope.md) |
+| D-129 | CLIVE v0.7 acceptance criteria — Block 11 full cross-session memory | Accepted | 2026-05-16 | Block 8, Block 11, Block 16, Block 28 | [D-129-v07-acceptance-criteria.md](docs/decisions/D-129-v07-acceptance-criteria.md) |

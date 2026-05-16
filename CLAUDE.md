@@ -221,7 +221,7 @@ All architectural decisions are in DECISIONS.md at the repo root.
 Full ADR files are in docs/decisions/. Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Highest decision ID at time of writing: D-127.
+Highest decision ID at time of writing: D-133.
 
 If implementation reveals a gap or conflict not covered by existing
 decisions, stop and flag it. Do not resolve design questions in code.

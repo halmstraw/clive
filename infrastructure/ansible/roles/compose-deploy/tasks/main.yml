@@ -39,6 +39,9 @@
     - 06_chunks_ingestion_columns.sql
     - 07_v03_tables.sql
     - 08_v04_tables.sql
+    - 09_v06_tables.sql
+    - 10_v07_memory_tables.sql
+    - 10_v07_actions_tables.sql
 
 - name: Create observability config directories on VM
   ansible.builtin.file:

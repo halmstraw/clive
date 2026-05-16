@@ -29,6 +29,7 @@ services:
       - TELEGRAM_SERVICE_URL=http://telegram:8082
       - QUERY_SERVICE_URL=http://query:8081
       - PROCESSING_SERVICE_URL=http://processing:8083
+      - SEARCH_API_PROVIDER=${SEARCH_API_PROVIDER:-brave}
     volumes:
       - /data/clive:/data/clive
     depends_on:
@@ -107,6 +108,7 @@ services:
       - ORCHESTRATOR_URL=http://orchestrator:8080
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_RAW_BUCKET=${MINIO_RAW_BUCKET:-clive-raw-store}
+      - CLIVE_TIMEZONE=${CLIVE_TIMEZONE:-UTC}
     depends_on:
       orchestrator:
         condition: service_healthy

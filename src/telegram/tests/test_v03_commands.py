@@ -288,7 +288,12 @@ async def test_bad_db_failure_replies_error(mock_bot_app):
 
 @pytest.mark.asyncio
 async def test_deliver_action_confirmation_stores_and_prompts(mock_bot_app):
-    """action.confirmation_requested must store action_request_id and prompt owner."""
+    """action.confirmation_requested must store action_request_id and prompt owner.
+
+    action_type must be included in the payload — deliver_action_confirmation
+    routes to _pending_deletes (document.delete) or _pending_action_generic
+    (all other types) based on this field. Block 9 always sends action_type.
+    """
     import clive_telegram.bot as bot_module
     _, mock_send = mock_bot_app
 
@@ -299,6 +304,7 @@ async def test_deliver_action_confirmation_stores_and_prompts(mock_bot_app):
     await deliver_action_confirmation(
         {
             "action_request_id": action_request_id,
+            "action_type": "document.delete",         # required — Block 9 always sends this
             "action_description": "Delete report.pdf (5 chunks).",
             "chat_id": chat_id,
         },

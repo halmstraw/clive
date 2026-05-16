@@ -27,10 +27,17 @@ v0.7 additions:
   intent detection in handle_message for web.search and reminder.schedule
   /confirm_action         — generic confirm for non-delete action types
   /cancel_action          — generic cancel for non-delete action types
+
+v0.8 additions:
+  /tools                  — list all registered tools (D-137)
+  /tool_disable <name>    — disable a tool (D-006 confirmation gate)
+  /tool_enable <name>     — enable a tool (D-006 confirmation gate)
+  /help                   — list available commands (D-119)
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from datetime import datetime, timezone
@@ -133,7 +140,21 @@ _pending_action_generic: dict[int, str] = {}
 # Used by /bad to tag the most recent retrieval.
 _last_retrieval: dict[int, dict[str, Any]] = {}
 
+# v0.8 — Block 17 tool management pending state.
+# Set when the owner triggers /tool_disable or /tool_enable awaiting confirmation.
+# Cleared on /confirm_action (moved to _confirmed_tool_ops) or /cancel_action.
+_pending_tool_ops: dict[int, dict] = {}
+
+# v0.8 — confirmed tool op awaiting admin.tool_updated push-back from Block 13.
+# Populated when /confirm_action is pressed for a tool op.
+# Cleared when admin.tool_updated arrives at the HTTP endpoint.
+_confirmed_tool_ops: dict[int, dict] = {}
+
 VALID_DOCUMENT_TYPES = {"personality", "alignment_rules"}
+
+_ACTION_DOCUMENT_DELETE = "document.delete"
+_EVENT_OWNER_RESPONSE = "action.owner_response"
+_SUPPRESS_TELEGRAM_REASON = "suppress_telegram=True in payload"
 
 
 def set_app(app: Application) -> None:
@@ -191,6 +212,30 @@ async def _emit_action_pending(
     )
 
 
+async def _check_rate_limit(chat_id: int, update: Update) -> bool:
+    """Apply inbound rate limiting (D-125). Returns True if the message should be dropped."""
+    rate_limit = int(os.environ.get("RATE_LIMIT_QUERIES_PER_HOUR", "0") or "0")
+    if rate_limit <= 0:
+        return False
+
+    current_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    if _rate_limit_state["hour"] != current_hour:
+        _rate_limit_state["hour"] = current_hour
+        _rate_limit_state["count"] = 0
+
+    if _rate_limit_state["count"] >= rate_limit:
+        rate_limited_total.inc()
+        log.info("rate_limit_hit", chat_id=chat_id, count=_rate_limit_state["count"])
+        if update.message:
+            await update.message.reply_text(
+                "Rate limit reached for this hour. Please try again next hour."
+            )
+        return True
+
+    _rate_limit_state["count"] += 1
+    return False
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle inbound Telegram message from owner.
 
@@ -207,24 +252,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not is_authenticated(chat_id):
         return  # Silent ignore — not the owner
 
-    # Block 20 — inbound rate limiting (D-125, v0.6).
-    # RATE_LIMIT_QUERIES_PER_HOUR: optional env var; no limit if unset/0.
-    # Counter resets at the top of each UTC clock hour.
-    rate_limit = int(os.environ.get("RATE_LIMIT_QUERIES_PER_HOUR", "0") or "0")
-    if rate_limit > 0:
-        current_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-        if _rate_limit_state["hour"] != current_hour:
-            _rate_limit_state["hour"] = current_hour
-            _rate_limit_state["count"] = 0
-        if _rate_limit_state["count"] >= rate_limit:
-            rate_limited_total.inc()
-            log.info("rate_limit_hit", chat_id=chat_id, count=_rate_limit_state["count"])
-            if update.message:
-                await update.message.reply_text(
-                    "Rate limit reached for this hour. Please try again next hour."
-                )
-            return
-        _rate_limit_state["count"] += 1
+    if await _check_rate_limit(chat_id, update):
+        return
 
     telegram_commands_total.labels(command="query").inc()
 
@@ -303,6 +332,47 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Ready.")
 
 
+async def _send_message(chat_id: int, text: str, parse_mode: str | None) -> None:
+    """Send a single Telegram message with the given parse mode."""
+    kwargs: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        kwargs["parse_mode"] = parse_mode
+    await _app.bot.send_message(**kwargs)  # type: ignore[union-attr]
+
+
+async def _deliver_message_with_fallback(chat_id: int, text: str, event_id: str) -> bool:
+    """Try Markdown then plain text, each with one network retry. Returns True on success."""
+    for parse_mode in ("Markdown", None):
+        for network_attempt in range(2):
+            try:
+                await _send_message(chat_id, text, parse_mode)
+                label = "response_delivered" if parse_mode else "response_delivered_plain"
+                log.info(label, event_id=event_id, chat_id=chat_id)
+                return True
+            except Exception as exc:
+                exc_str = str(exc)
+                is_network = "NetworkError" in type(exc).__name__ or "NetworkError" in exc_str
+                if is_network and network_attempt == 0:
+                    log.warning(
+                        "response_network_error_retrying",
+                        event_id=event_id,
+                        chat_id=chat_id,
+                        attempt=network_attempt + 1,
+                        exc=exc_str,
+                    )
+                    await asyncio.sleep(3)
+                    continue
+                log.warning(
+                    "response_send_failed",
+                    event_id=event_id,
+                    chat_id=chat_id,
+                    parse_mode=parse_mode,
+                    exc=exc_str,
+                )
+                break
+    return False
+
+
 async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> None:
     """Deliver query.response to the owner via Telegram.
 
@@ -318,8 +388,6 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
     Delivery: tries Markdown first, falls back to plain text on parse
     failure, retries once on NetworkError before logging a hard failure.
     """
-    import asyncio as _asyncio  # noqa: PLC0415
-
     event_id = response_payload.get("event_id", "")
 
     if event_id:
@@ -351,46 +419,8 @@ async def deliver_response(response_payload: dict[str, Any], chat_id: int) -> No
         log.warning("response_drop_no_app", event_id=event_id)
         return
 
-    async def _send(parse_mode: str | None = "Markdown") -> None:
-        kwargs: dict = {"chat_id": chat_id, "text": response_text}
-        if parse_mode:
-            kwargs["parse_mode"] = parse_mode
-        await _app.bot.send_message(**kwargs)  # type: ignore[union-attr]
-
-    # Attempt 1: Markdown
-    # Attempt 2 (on parse failure): plain text
-    # Each attempt retries once on NetworkError with a 3s pause
-    for parse_mode in ("Markdown", None):
-        for network_attempt in range(2):
-            try:
-                await _send(parse_mode)
-                label = "response_delivered" if parse_mode else "response_delivered_plain"
-                log.info(label, event_id=event_id, chat_id=chat_id)
-                return
-            except Exception as exc:
-                exc_str = str(exc)
-                is_network = "NetworkError" in type(exc).__name__ or "NetworkError" in exc_str
-                if is_network and network_attempt == 0:
-                    log.warning(
-                        "response_network_error_retrying",
-                        event_id=event_id,
-                        chat_id=chat_id,
-                        attempt=network_attempt + 1,
-                        exc=exc_str,
-                    )
-                    await _asyncio.sleep(3)
-                    continue
-                # Non-network error, or second network failure: break to next parse_mode
-                log.warning(
-                    "response_send_failed",
-                    event_id=event_id,
-                    chat_id=chat_id,
-                    parse_mode=parse_mode,
-                    exc=exc_str,
-                )
-                break
-
-    log.error("response_delivery_failed_all_attempts", event_id=event_id, chat_id=chat_id)
+    if not await _deliver_message_with_fallback(chat_id, response_text, event_id):
+        log.error("response_delivery_failed_all_attempts", event_id=event_id, chat_id=chat_id)
 
 
 async def deliver_alert(alert_payload: dict[str, Any], chat_id: int) -> None:
@@ -801,7 +831,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
             "payload": {
-                "action_type": "document.delete",
+                "action_type": _ACTION_DOCUMENT_DELETE,
                 "action_target": filename,
                 "action_description": description,
                 "chat_id": chat_id,
@@ -845,7 +875,7 @@ async def handle_confirm_delete(update: Update, context: ContextTypes.DEFAULT_TY
     event_id = uuid.uuid4()
 
     await _emit_to_orchestrator(
-        "action.owner_response",
+        _EVENT_OWNER_RESPONSE,
         {
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
@@ -891,7 +921,7 @@ async def handle_cancel_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     event_id = uuid.uuid4()
 
     await _emit_to_orchestrator(
-        "action.owner_response",
+        _EVENT_OWNER_RESPONSE,
         {
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
@@ -921,14 +951,14 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
     suppress_telegram: if True in the payload, skips the Telegram send.
     """
     if confirmation_payload.get("suppress_telegram"):
-        log.info("suppress_telegram_confirmation", reason="suppress_telegram=True in payload")
+        log.info("suppress_telegram_confirmation", reason=_SUPPRESS_TELEGRAM_REASON)
         return
 
     action_request_id = confirmation_payload.get("action_request_id", "")
     action_description = confirmation_payload.get("action_description", "")
     action_type = confirmation_payload.get("action_type", "")
 
-    if action_type == "document.delete":
+    if action_type == _ACTION_DOCUMENT_DELETE:
         _pending_deletes[chat_id] = action_request_id
         confirm_cmd = "/confirm_delete"
         cancel_cmd = "/cancel_delete"
@@ -965,7 +995,7 @@ async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) 
     _pending_action_generic.pop(chat_id, None)
 
     if outcome_payload.get("suppress_telegram"):
-        log.info("suppress_telegram_outcome", reason="suppress_telegram=True in payload")
+        log.info("suppress_telegram_outcome", reason=_SUPPRESS_TELEGRAM_REASON)
         return
 
     reason = outcome_payload.get("reason", "unknown")
@@ -978,7 +1008,7 @@ async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) 
         "not_found": "the document was not found",
     }.get(reason, reason)
 
-    if action_type == "document.delete":
+    if action_type == _ACTION_DOCUMENT_DELETE:
         text = f"Deletion of {action_target} {reason_text}."
     else:
         text = f"Action {reason_text}."
@@ -998,7 +1028,7 @@ async def deliver_deletion_result(result_payload: dict[str, Any], chat_id: int) 
     suppress_telegram: if True in the payload, skips the Telegram send.
     """
     if result_payload.get("suppress_telegram"):
-        log.info("suppress_telegram_deletion_result", reason="suppress_telegram=True in payload")
+        log.info("suppress_telegram_deletion_result", reason=_SUPPRESS_TELEGRAM_REASON)
         return
 
     event_type = result_payload.get("event_type", "")
@@ -1136,6 +1166,32 @@ async def handle_confirm_action(update: Update, context: ContextTypes.DEFAULT_TY
 
     telegram_commands_total.labels(command="other").inc()
 
+    # v0.8 — tool management: check pending tool ops before generic actions
+    if chat_id in _pending_tool_ops:
+        op_data = _pending_tool_ops.pop(chat_id)
+        tool_name = op_data["tool_name"]
+        op = op_data["op"]
+        event_type = "admin.tool_disable" if op == "disable" else "admin.tool_enable"
+
+        # Retain state until admin.tool_updated push arrives (success message comes then)
+        _confirmed_tool_ops[chat_id] = op_data
+
+        conversation_id = sessions.get_or_create(chat_id)
+        await _emit_to_orchestrator(
+            event_type,
+            {
+                "event_id": str(uuid.uuid4()),
+                "conversation_id": str(conversation_id),
+                "payload": {
+                    "tool_name": tool_name,
+                    "confirmed": True,
+                    "chat_id": chat_id,
+                },
+            },
+        )
+        log.info("tool_op_confirmed", chat_id=chat_id, tool_name=tool_name, op=op)
+        return  # Success message delivered via admin.tool_updated HTTP push
+
     action_request_id = _pending_action_generic.get(chat_id)
     if not action_request_id:
         await update.message.reply_text(
@@ -1147,7 +1203,7 @@ async def handle_confirm_action(update: Update, context: ContextTypes.DEFAULT_TY
     event_id = uuid.uuid4()
 
     await _emit_to_orchestrator(
-        "action.owner_response",
+        _EVENT_OWNER_RESPONSE,
         {
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
@@ -1179,6 +1235,20 @@ async def handle_cancel_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
     telegram_commands_total.labels(command="other").inc()
 
+    # v0.8 — tool management: check pending tool ops before generic actions
+    if chat_id in _pending_tool_ops:
+        op_data = _pending_tool_ops.pop(chat_id)
+        tool_name = op_data["tool_name"]
+        op = op_data["op"]
+        # Cancel message per Block 3 UX spec (section 2.5 / 3.5)
+        if op == "disable":
+            cancel_text = f"Cancelled. {tool_name} remains enabled."
+        else:
+            cancel_text = f"Cancelled. {tool_name} remains disabled."
+        await update.message.reply_text(cancel_text)
+        log.info("tool_op_cancelled", chat_id=chat_id, tool_name=tool_name, op=op)
+        return
+
     action_request_id = _pending_action_generic.pop(chat_id, None)
     if not action_request_id:
         await update.message.reply_text("No pending action to cancel.")
@@ -1188,7 +1258,7 @@ async def handle_cancel_action(update: Update, context: ContextTypes.DEFAULT_TYP
     event_id = uuid.uuid4()
 
     await _emit_to_orchestrator(
-        "action.owner_response",
+        _EVENT_OWNER_RESPONSE,
         {
             "event_id": str(event_id),
             "conversation_id": str(conversation_id),
@@ -1463,3 +1533,400 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     await update.message.reply_text("\n".join(lines))
     log.info("status_delivered", chat_id=chat_id, doc_count=doc_count, llm_spend=llm_spend_today_usd)
+
+
+# ---------------------------------------------------------------------------
+# v0.8 — Tool management helpers (Block 3 UX spec, D-137)
+# ---------------------------------------------------------------------------
+
+def _format_tool_entry(row: Any) -> str:
+    """Format a single tool_registry row per Block 3 UX design specification."""
+    tool_name = row["tool_name"]
+    display_name = row["display_name"]
+    version = row["version"]
+    description = row["description"]
+    enabled = row["enabled"]
+    deprecated = row["deprecated"]
+    deprecation_note = row["deprecation_note"]
+    health_status = row["health_status"]
+
+    status = "enabled" if enabled else "disabled"
+    if deprecated:
+        status += " [deprecated]"
+    if health_status and health_status != "healthy":
+        status += f" [health: {health_status}]"
+
+    lines = [
+        f"`{tool_name}` v{version} — {status}",
+        f"{display_name}. {description}",
+    ]
+    if deprecated and deprecation_note:
+        lines.append(f"Deprecated: {deprecation_note}")
+
+    return "\n".join(lines)
+
+
+def _pack_tool_messages(header: str, entries: list[str]) -> list[str]:
+    """Split tool entries into messages ≤ 3800 chars (UX spec section 1.5).
+
+    The first message carries the header; continuation messages use
+    the reduced header "Tools (continued)" per UX spec.
+    """
+    LIMIT = 3800
+
+    def build_msg(h: str, es: list[str]) -> str:
+        return h + "\n\n" + "\n\n".join(es)
+
+    messages: list[str] = []
+    current_header = header
+    current_entries: list[str] = []
+
+    for entry in entries:
+        candidate = build_msg(current_header, current_entries + [entry])
+        if len(candidate) > LIMIT and current_entries:
+            messages.append(build_msg(current_header, current_entries))
+            current_header = "Tools (continued)"
+            current_entries = [entry]
+        else:
+            current_entries.append(entry)
+
+    if current_entries:
+        messages.append(build_msg(current_header, current_entries))
+
+    return messages
+
+
+# ---------------------------------------------------------------------------
+# v0.8 — Tool management command handlers (D-137, D-006)
+# ---------------------------------------------------------------------------
+
+async def handle_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+    """/tools — list all registered tools (v0.8, D-137).
+
+    Direct DB read (admin operation — same pattern as handle_activate).
+    Formatted per Block 3 UX design specification.
+    Paginates at 3800 chars per UX spec section 1.5.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="tools").inc()
+
+    pool = get_pool()
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT tool_name, display_name, version, description,
+                       enabled, deprecated, deprecation_note, health_status
+                FROM clive_state.tool_registry
+                ORDER BY tool_name
+                """
+            )
+    except Exception as exc:
+        log.error("tool_registry_fetch_failed", chat_id=chat_id, error=str(exc))
+        await update.message.reply_text(
+            "Tool registry is unavailable. Try again shortly."
+        )
+        return
+
+    if not rows:
+        await update.message.reply_text("No tools are registered.")
+        return
+
+    entries = [_format_tool_entry(row) for row in rows]
+    header = f"Tools — {len(rows)} registered"
+    messages = _pack_tool_messages(header, entries)
+
+    for msg in messages:
+        await update.message.reply_text(msg, parse_mode="Markdown")
+
+    log.info("tools_listed", chat_id=chat_id, tool_count=len(rows))
+
+
+async def handle_tool_disable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/tool_disable <name> — disable a registered tool (v0.8, D-137, D-006).
+
+    Direct DB read for pre-checks.
+    State change routes through Block 9 confirmation gate (D-006):
+      owner confirms with /confirm_action → admin.tool_disable emitted to Block 13.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="tools").inc()
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage: /tool_disable <tool_name>\n"
+            "Use /tools to see registered tool names."
+        )
+        return
+
+    tool_name = args[0].strip()
+
+    pool = get_pool()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT tool_name, display_name, version, description,
+                       enabled, deprecated, deprecation_note
+                FROM clive_state.tool_registry
+                WHERE tool_name = $1
+                """,
+                tool_name,
+            )
+    except Exception as exc:
+        log.error(
+            "tool_registry_fetch_failed",
+            chat_id=chat_id,
+            tool_name=tool_name,
+            error=str(exc),
+        )
+        await update.message.reply_text(
+            "Tool registry is unavailable. Try again shortly."
+        )
+        return
+
+    if row is None:
+        await update.message.reply_text(
+            f"No tool named {tool_name} is registered.\n"
+            "Use /tools to see registered tool names."
+        )
+        return
+
+    if not row["enabled"]:
+        await update.message.reply_text(f"{tool_name} is already disabled.")
+        return
+
+    # Tool exists and is enabled — require explicit confirmation (D-006)
+    display_name = row["display_name"]
+    version = row["version"]
+    description = row["description"]
+
+    _pending_tool_ops[chat_id] = {
+        "op": "disable",
+        "tool_name": tool_name,
+        "deprecated": bool(row["deprecated"]),
+    }
+
+    # Exact confirmation prompt per Block 3 UX spec section 2.5
+    prompt = (
+        f"Disable {tool_name}?\n\n"
+        f"{display_name} · v{version}\n"
+        f"{description}\n\n"
+        "When disabled, this tool will be unavailable until re-enabled.\n\n"
+        "/confirm_action — confirm disable\n"
+        "/cancel_action — cancel"
+    )
+    await update.message.reply_text(prompt)
+
+    log.info("tool_disable_confirmation_sent", chat_id=chat_id, tool_name=tool_name)
+
+
+async def handle_tool_enable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/tool_enable <name> — enable a registered tool (v0.8, D-137, D-006).
+
+    Mirrors handle_tool_disable.
+    Deprecated-tool variant includes deprecation note in the confirmation prompt
+    per Block 3 UX spec section 3.6.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="tools").inc()
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Usage: /tool_enable <tool_name>\n"
+            "Use /tools to see registered tool names."
+        )
+        return
+
+    tool_name = args[0].strip()
+
+    pool = get_pool()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT tool_name, display_name, version, description,
+                       enabled, deprecated, deprecation_note
+                FROM clive_state.tool_registry
+                WHERE tool_name = $1
+                """,
+                tool_name,
+            )
+    except Exception as exc:
+        log.error(
+            "tool_registry_fetch_failed",
+            chat_id=chat_id,
+            tool_name=tool_name,
+            error=str(exc),
+        )
+        await update.message.reply_text(
+            "Tool registry is unavailable. Try again shortly."
+        )
+        return
+
+    if row is None:
+        await update.message.reply_text(
+            f"No tool named {tool_name} is registered.\n"
+            "Use /tools to see registered tool names."
+        )
+        return
+
+    if row["enabled"]:
+        # Already enabled — surface deprecation note if present (UX spec 3.4)
+        if row["deprecated"]:
+            note = row["deprecation_note"] or ""
+            note_suffix = f" {note}" if note else ""
+            await update.message.reply_text(
+                f"{tool_name} is already enabled.\n"
+                f"Note: this tool is deprecated.{note_suffix}"
+            )
+        else:
+            await update.message.reply_text(f"{tool_name} is already enabled.")
+        return
+
+    # Tool exists and is disabled — require explicit confirmation (D-006)
+    display_name = row["display_name"]
+    version = row["version"]
+    description = row["description"]
+    deprecated = bool(row["deprecated"])
+    deprecation_note = row["deprecation_note"] or ""
+
+    _pending_tool_ops[chat_id] = {
+        "op": "enable",
+        "tool_name": tool_name,
+        "deprecated": deprecated,
+    }
+
+    if deprecated:
+        # UX spec section 3.6 — deprecated tool confirmation variant
+        prompt = (
+            f"Enable {tool_name}?\n\n"
+            f"{display_name} · v{version} [deprecated]\n"
+            f"{description}\n\n"
+            f"Deprecated: {deprecation_note}\n\n"
+            "/confirm_action — enable anyway\n"
+            "/cancel_action — cancel"
+        )
+    else:
+        # UX spec section 3.5 — standard enable confirmation
+        prompt = (
+            f"Enable {tool_name}?\n\n"
+            f"{display_name} · v{version}\n"
+            f"{description}\n\n"
+            "This tool will be available immediately.\n\n"
+            "/confirm_action — confirm enable\n"
+            "/cancel_action — cancel"
+        )
+
+    await update.message.reply_text(prompt)
+
+    log.info(
+        "tool_enable_confirmation_sent",
+        chat_id=chat_id,
+        tool_name=tool_name,
+        deprecated=deprecated,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.8 — Tool updated/error delivery (push from Block 13)
+# ---------------------------------------------------------------------------
+
+async def deliver_tool_updated(payload: dict[str, Any], chat_id: int) -> None:
+    """Receive admin.tool_updated from Block 13 and notify owner (v0.8).
+
+    Resolves success message text from _confirmed_tool_ops local state,
+    with fallback to payload fields for resilience.
+    Success text per Block 3 UX spec sections 2.6 / 3.7.
+    """
+    op_data = _confirmed_tool_ops.pop(chat_id, None)
+
+    if op_data:
+        tool_name = op_data["tool_name"]
+        op = op_data["op"]
+        deprecated = op_data.get("deprecated", False)
+    else:
+        # Fallback if local state was lost (e.g. process restart)
+        tool_name = payload.get("tool_name", "unknown")
+        op = payload.get("operation", "")
+        deprecated = payload.get("deprecated", False)
+
+    if op == "disable":
+        text = f"{tool_name} disabled."
+    elif op == "enable":
+        if deprecated:
+            text = f"{tool_name} enabled. Note: this tool is deprecated."
+        else:
+            text = f"{tool_name} enabled."
+    else:
+        text = f"{tool_name} updated."
+
+    if _app:
+        await _app.bot.send_message(chat_id=chat_id, text=text)
+        log.info("tool_updated_delivered", chat_id=chat_id, tool_name=tool_name, op=op)
+
+
+async def deliver_tool_error(payload: dict[str, Any], chat_id: int) -> None:  # noqa: ARG001
+    """Receive admin.tool_error from Block 13 and notify owner (v0.8)."""
+    _confirmed_tool_ops.pop(chat_id, None)
+
+    if _app:
+        await _app.bot.send_message(
+            chat_id=chat_id,
+            text="Tool registry is unavailable. Try again shortly.",
+        )
+        log.warning("tool_error_delivered", chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# D-119 — /help command
+# ---------------------------------------------------------------------------
+
+async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+    """/help — list all available commands (D-119)."""
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="other").inc()
+
+    text = (
+        "Commands\n\n"
+        "/start — reset conversation\n"
+        "/list — list ingested documents\n"
+        "/status — system status\n\n"
+        "/ingest — ingest file (send file with /ingest as caption)\n"
+        "/ingest_confirm — confirm pending ingest (mobile)\n"
+        "/delete <filename> — delete a document\n\n"
+        "/tools — list all registered tools\n"
+        "/tool_disable <tool_name> — disable a tool (requires confirmation)\n"
+        "/tool_enable <tool_name> — enable a tool (requires confirmation)\n\n"
+        "/bad — tag last response as poor quality\n"
+        "/activate <document_type> — activate a pending system document\n"
+        "/help — this list"
+    )
+
+    await update.message.reply_text(text)

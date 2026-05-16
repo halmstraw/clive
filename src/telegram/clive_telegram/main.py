@@ -22,6 +22,14 @@ v0.5 additions:
 v0.7 additions:
   /confirm_action — generic confirm for web.search and reminder.schedule
   /cancel_action  — generic cancel for web.search and reminder.schedule
+
+v0.8 additions:
+  /tools          — list all registered tools (D-137)
+  /tool_disable   — disable a tool (D-006 confirmation gate)
+  /tool_enable    — enable a tool (D-006 confirmation gate)
+  /help           — list available commands (D-119)
+  /tool-updated HTTP endpoint — admin.tool_updated push from Block 13
+  /tool-error HTTP endpoint   — admin.tool_error push from Block 13
 """
 
 from __future__ import annotations
@@ -44,6 +52,8 @@ from .bot import (
     deliver_deletion_result,
     deliver_ingest_status,
     deliver_response,
+    deliver_tool_error,
+    deliver_tool_updated,
     handle_activate,
     handle_bad,
     handle_cancel_action,
@@ -53,12 +63,16 @@ from .bot import (
     handle_confirm_delete,
     handle_delete,
     handle_document_received,
+    handle_help,
     handle_ingest,
     handle_ingest_confirm,
     handle_list,
     handle_message,
     handle_start,
     handle_status,
+    handle_tool_disable,
+    handle_tool_enable,
+    handle_tools,
     set_app,
 )
 from . import db
@@ -148,6 +162,34 @@ async def handle_deletion_result_push(request: web.Request) -> web.Response:
     return web.json_response({"status": "accepted"})
 
 
+async def handle_tool_updated_push(request: web.Request) -> web.Response:
+    """Receive admin.tool_updated from Block 13 (Block 17 → surface) (v0.8)."""
+    data = await request.json()
+    chat_id_raw = data.get("chat_id") or data.get("payload", {}).get("chat_id")
+    if chat_id_raw is None:
+        chat_id_raw = get_owner_chat_id()
+    chat_id = int(chat_id_raw)
+    payload = {**data, **data.get("payload", {})}
+    _task = asyncio.create_task(deliver_tool_updated(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
+    return web.json_response({"status": "accepted"})
+
+
+async def handle_tool_error_push(request: web.Request) -> web.Response:
+    """Receive admin.tool_error from Block 13 (v0.8)."""
+    data = await request.json()
+    chat_id_raw = data.get("chat_id") or data.get("payload", {}).get("chat_id")
+    if chat_id_raw is None:
+        chat_id_raw = get_owner_chat_id()
+    chat_id = int(chat_id_raw)
+    payload = {**data, **data.get("payload", {})}
+    _task = asyncio.create_task(deliver_tool_error(payload, chat_id))
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
+    return web.json_response({"status": "accepted"})
+
+
 async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
     await asyncio.sleep(0)
     return web.json_response({"status": "ok", "block": 23})
@@ -186,6 +228,14 @@ async def main() -> None:
     application.add_handler(CommandHandler("confirm_action", handle_confirm_action))
     application.add_handler(CommandHandler("cancel_action", handle_cancel_action))
 
+    # v0.8 — tool management commands (D-137, D-006)
+    application.add_handler(CommandHandler("tools", handle_tools))
+    application.add_handler(CommandHandler("tool_disable", handle_tool_disable))
+    application.add_handler(CommandHandler("tool_enable", handle_tool_enable))
+
+    # D-119 — help command
+    application.add_handler(CommandHandler("help", handle_help))
+
     # v0.4 — mobile ingest and new commands (D-114)
     application.add_handler(CommandHandler("ingest_confirm", handle_ingest_confirm))
     application.add_handler(CommandHandler("list", handle_list))
@@ -218,6 +268,10 @@ async def main() -> None:
     http_app.router.add_post("/action-confirmation", handle_action_confirmation_push)
     http_app.router.add_post("/action-outcome", handle_action_outcome_push)
     http_app.router.add_post("/deletion-result", handle_deletion_result_push)
+
+    # v0.8 — Block 17 tool management result endpoints
+    http_app.router.add_post("/tool-updated", handle_tool_updated_push)
+    http_app.router.add_post("/tool-error", handle_tool_error_push)
 
     http_app.router.add_get("/health", handle_health)
     http_app.router.add_get("/metrics", handle_metrics)

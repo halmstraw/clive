@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-129
+Last decision ID: D-130
 Last updated: 2026-05-16
 
 | ID | Title | Status | Date | Blocks | File |
@@ -138,3 +138,4 @@ Last updated: 2026-05-16
 | D-127 | CLIVE v0.6 signed off — all seven criteria met 16 May 2026 | Accepted | 2026-05-16 | All blocks | [D-127-v06-signed-off.md](docs/decisions/D-127-v06-signed-off.md) |
 | D-128 | CLIVE v0.7 scope approved — Block 11 full cross-session memory | Accepted | 2026-05-16 | Block 8, Block 11, Block 16 | [D-128-v07-scope.md](docs/decisions/D-128-v07-scope.md) |
 | D-129 | CLIVE v0.7 acceptance criteria — Block 11 full cross-session memory | Accepted | 2026-05-16 | Block 8, Block 11, Block 16, Block 28 | [D-129-v07-acceptance-criteria.md](docs/decisions/D-129-v07-acceptance-criteria.md) |
+| D-130 | CLIVE v0.7 signed off — all six criteria met 16 May 2026 | Accepted | 2026-05-16 | Block 8, Block 11, Block 16, Block 28 | [D-130-v07-signed-off.md](docs/decisions/D-130-v07-signed-off.md) |

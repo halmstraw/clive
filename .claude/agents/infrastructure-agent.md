@@ -29,18 +29,19 @@ Read `DECISIONS.md` from the repo root before acting on any instruction. It is m
 
 ---
 
-### v0.1 Implementation State
+### Implementation State — Post v0.7
 
-The following was completed for v0.1. Use as reference context for v0.2/v0.3 work.
+The following is complete and in production. Use as reference context for future work.
 
-**Block 25 (Observability) — requirements complete.**
-- Logging, tracing, metrics, alerting, and evolution history view specified.
+**Block 25 (Observability) — fully implemented (D-124).**
+- Stack: Prometheus + Loki + Grafana (D-117). Grafana exposed publicly via
+  Caddy reverse proxy at grafana.halmshaw.co.uk (D-121).
+- Alert routing via orchestrator webhook (D-118) — D-003 compliant.
+  Alertmanager POSTs to orchestrator; orchestrator emits alert.triggered event
+  consumed by Block 23 (Telegram) for owner notification.
+- Event bus observability: JSON structured logging per event, event_dispatched
+  log line, Grafana dashboard for event throughput (D-134).
 - Alert schema confirmed by D-078 (jointly owned by Block 25 and Block 4).
-- Experimental environment lightweight observability specified as a minimal
-  separate component (not a second instance of Block 25).
-- Interfaces: subscribes to full event stream via Block 13; emits alert.triggered
-  and evolution_history.received; exposes retrieval interface to Block 8 via
-  D-043 pattern.
 
 **Block 27 (Infrastructure / IaC) — implemented.**
 Stack: Terraform (Hetzner VM) + Ansible (VM config) + Docker Compose (services).
@@ -95,20 +96,30 @@ Pipeline files:
 
 ---
 
-### Current Priority — v0.3
+### Current System State — Post v0.7
 
-v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
-Block 18 Feedback). Your v0.3 task:
+v0.7 is the latest shipped version. Your blocks are in production as follows:
 
-**Fix the Terraform GHA secret name mismatch.**
-`terraform.yml` references `secrets.HCLOUD_TOKEN` but the GHA secret is named
-`HETZNER_API_TOKEN`. Terraform will fail if run. Fix is a one-line change in
-`terraform.yml`. This is a maintenance item — fix it before any infrastructure
-changes are needed.
+**Block 27 (Infrastructure / IaC):** In production. Hetzner VM (cx21), Terraform
+for VM provisioning, Ansible for configuration, Docker Compose for services.
+Terraform GHA secret name mismatch (`HCLOUD_TOKEN` vs `HETZNER_API_TOKEN`) was
+fixed — terraform.yml correctly uses `HETZNER_API_TOKEN`. SQL init loop extended
+to cover all migrations through v0.7 (D-133 bug fix).
 
-Monitor v0.3 for any infrastructure or CI/CD implications from the new deletion
-and feedback capabilities. If new audit event types require schema changes that
-affect the CI pipeline, flag them.
+**Block 28 (CI/CD):** In production. GitHub Actions self-hosted runner (D-090).
+ci.yml (lint + unit + SQL idempotency), deploy.yml (build + deploy + verify +
+e2e), rollback.yml (manual). e2e.yml added during v0.3. Deployment secrets
+include SEARCH_API_KEY from v0.7 (D-133 bug fix).
+
+**Block 25 (Observability):** Fully shipped v0.5 (D-124). Prometheus, Loki,
+Grafana. Event bus JSON logging and Grafana dashboard (D-134).
+
+**Block 29 (Documentation):** DECISIONS.md maintained locally (D-102). ADR
+files in docs/decisions/. Runbooks in docs/runbooks/.
+
+**Block 26 (Physical Device/Edge Node):** Not yet activated.
+
+No open tasks. Await owner direction on next sprint scope.
 
 ---
 

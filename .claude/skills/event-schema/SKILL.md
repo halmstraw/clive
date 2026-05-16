@@ -20,7 +20,7 @@ All inter-block communication routes through the Central Orchestrator
 documenting those events so that every agent produces consistent,
 composable interface specifications.
 
-See `reference/event-bus-contract.md` for the full contract and examples.
+
 
 ---
 

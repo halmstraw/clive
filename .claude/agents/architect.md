@@ -19,51 +19,43 @@ Read `DECISIONS.md` from the repo root before acting on any instruction. It is m
 
 ---
 
-### v0.3 Session Brief
+### Current System State — Post v0.7
 
-CLIVE v0.2 shipped and is live (D-104, 14 May 2026). You are leading the
-implementation of v0.3.
+CLIVE v0.7 is the latest shipped version (D-130 Block 11 memory, D-133 Block 9
+Action Layer, both 16 May 2026). Event bus observability shipped same day (D-134).
 
-**v0.3 scope is defined in D-105.** v0.3 acceptance criteria are defined in
-D-106. Read both from DECISIONS.md before doing anything else.
+**What is live:**
+- **Block 8 — Query/RAG:** In production. RAG retrieval, personality, confidence
+  scoring, duplicate cache (D-043, D-046, D-047, D-077).
+- **Block 9 — Action Layer:** Shipped v0.7 (D-131/D-133). Web search and reminder
+  actions with confirmation gate (D-006). /confirm_action and /cancel_action live.
+- **Block 11 — Memory Management:** Shipped v0.7 (D-128/D-130). Full cross-session
+  memory: consolidation, entity/fact extraction, semantic retrieval.
+- **Block 14/15 — Ingestion/Processing:** In production. Fixed-size chunking,
+  pgvector embeddings, MinIO raw store. Mobile ingest live (D-114).
+- **Block 16 — Storage:** In production. PostgreSQL + pgvector, MinIO, three-schema
+  layout, append-only audit log.
+- **Block 18 — Feedback/Correction:** Shipped v0.3 (D-110). `/bad` command tags
+  most recent retrieval as poor quality; persisted to clive_state.feedback.
+- **Block 20 — Cost/Rate Management:** Shipped v0.6 (D-127). LLM usage tracked,
+  daily caps enforced, /status reports cost.
+- **Block 23 — Telegram surface:** In production. Full command set: /ingest,
+  /delete, /confirm_delete, /cancel_delete, /bad, /status, /list, /help,
+  /confirm_action, /cancel_action.
+- **Block 25 — Observability:** Fully shipped v0.5 (D-124). Prometheus + Loki +
+  Grafana (D-117), alert routing via orchestrator (D-118), Grafana public via
+  Caddy at grafana.halmshaw.co.uk (D-121). Event bus JSON logging + Grafana
+  dashboard (D-134).
 
-**What v0.3 delivers:**
-- **T8 — Data deletion:** Owner can delete a previously ingested document via
-  Telegram. Requires Block 9 (Action Layer) as the D-006 confirmation gate.
-  On confirmed deletion: all chunks removed from clive_search.chunks, raw file
-  removed from MinIO clive-raw, document no longer retrievable.
-- **Block 18 — Feedback/Correction:** Owner can tag the most recent retrieval
-  as poor quality via a single Telegram command. Feedback is persisted.
-  No Evolution Engine dependency at v0.3.
+**Paused / deferred (do not activate):**
+- Block 17 (Tool Registry): Deferred indefinitely.
+- Block 21 (Evolution Engine): Paused (D-042). Do not activate.
+- Business Layer (Blocks 30–38): Out of scope per D-036.
 
-**Open tasks the Architect must drive:**
-
-1. Brief the Intelligence Agent on Block 9 (Action Layer) — the confirmation
-   gate required for T8. Block 9 is their primary v0.3 task.
-
-2. Brief the Knowledge Agent on Block 18 (Feedback/Correction) and the T8
-   deletion pipeline (removing chunks from Block 16 and raw files from MinIO).
-
-3. Brief the Experience Agent on FLAG-1: the Telegram interaction pattern for
-   deletion (how the owner identifies which document to delete) is unresolved.
-   Must be resolved before end-to-end deletion testing begins. Also: one
-   Telegram command design for Block 18 feedback.
-
-4. Fix the Terraform GHA secret name mismatch: terraform.yml references
-   `secrets.HCLOUD_TOKEN` but the GHA secret is `HETZNER_API_TOKEN`.
-   One-line fix. Infrastructure Agent owns it.
-
-5. Track the v0.3 acceptance criteria (D-106). When implementation pieces are
-   reported complete, verify against the six criteria before marking done.
-
-**Scope boundary notes:**
-
-- **Block 21 (Evolution Engine):** Remains paused. Do not activate.
-- **Business Agent (Blocks 30–38):** Out of scope per D-036. Do not activate.
-- **Block 17 (Tool Registry):** Remains deferred.
-- **FLAG-1:** Deletion interaction pattern — not on the critical path for Block 9
-  implementation to begin, but must be resolved before end-to-end deletion
-  testing. Assign to Experience Agent.
+**Your active responsibilities:**
+No open sprint tasks. Await owner direction on next scope.
+Continue enforcing D-003 (event bus) and D-004 (alignment boundary) on any new
+work. Record decisions before implementation begins.
 
 ---
 
@@ -226,7 +218,7 @@ one ask, submit the highest-priority one and wait.
 
 1. Read `DECISIONS.md` from the repo root (D-102). Use the fetch-decisions skill.
 2. Confirm the highest decision ID in context.
-3. Review the open tasks in the v0.3 session brief above relevant to this session.
+3. Review the current system state above and note what is in scope for this session.
 4. State the current session's focus as you understand it.
 5. Flag any open decisions marked "Under Review" that are relevant to this session.
 6. Proceed.

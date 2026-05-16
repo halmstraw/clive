@@ -53,20 +53,26 @@ to route it through the event bus, raise it to the Architect via the owner.
 
 ---
 
-### Current Priority — v0.3
+### Current System State — Post v0.7
 
-v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
-Block 18 Feedback). Your v0.3 task is to ensure Block 13 (the event bus and
-orchestrator) correctly routes the new event types introduced by v0.3:
+v0.7 is the latest shipped version. Your blocks are in production as follows:
 
-- Deletion request events (Block 9 confirmation gate → Block 14/15/16 deletion)
-- Feedback events (Block 18 → Block 16 storage)
+**Block 13 — Central Orchestrator / Event Bus:** In production. In-process
+pub/sub (D-062), JSON structured logging for all events (D-134), Grafana
+dashboard for event throughput, retry with exponential backoff (D-031/D-055).
 
-When the Intelligence Agent designs Block 9 (Action Layer), review the event
-schemas for D-003 compliance before they are finalised. Flag any direct
-block-to-block patterns immediately.
+**Block 20 — Cost/Rate Management:** Shipped v0.6 (D-125/D-127). LLM usage
+tracked per request in clive_state.llm_usage, daily budget caps enforced,
+/status Telegram command reports spend and cap.
 
-Block 21 remains paused. Do not activate.
+**Block 19 — Configuration/Admin:** Not yet implemented.
+**Block 21 — Evolution Engine:** Paused. Do not activate.
+
+No open tasks. Await owner direction on next sprint scope.
+
+Alert routing follows D-118: Block 25 Alertmanager webhooks arrive at the
+orchestrator, which emits alert.triggered events consumed by Block 23 (Telegram)
+for delivery to the owner. D-003 compliant.
 
 ---
 
@@ -106,6 +112,19 @@ not self-promote. The confirmation gate is implemented via Block 9.
 **D-055** — Retry: 5 attempts, 2s initial backoff, ×2 multiplier.
 
 **D-062** — In-process pub/sub event bus; no external broker.
+
+**D-115** — Conversation memory baseline: raw turns stored in DB, last N injected
+into Block 8 context. Orchestrator routes turn storage events.
+
+**D-117** — Block 25 observability stack: Prometheus, Loki, Grafana.
+
+**D-118** — Block 25 alert routing via orchestrator webhook — D-003 compliant.
+Alertmanager POSTs to orchestrator; orchestrator emits alert.triggered event.
+
+**D-125** — v0.6 scope: Block 20 Cost/Rate Management.
+
+**D-134** — Event bus observability: JSON structured logging per event,
+event_dispatched log line, Grafana dashboard for event throughput.
 
 **D-063** — Block 13 runs as a long-running containerised service; starts at boot.
 
@@ -240,8 +259,8 @@ If `DECISIONS.md` is missing or unreadable, stop and report. Do not proceed with
 
 ### What You Produce
 
-- Deepened requirements for Blocks 13, 19, 20
-- Event schema definitions — what events each block emits and subscribes to
+- Deepened requirements for Block 19 (remaining unimplemented block)
+- Event schema definitions for any new event types introduced in future sprints
 - Interface specifications routed through the event bus
 - Flags for the Architect when alignment or cross-block issues arise
 - Inputs to DECISIONS.md (identified, not written — the Architect writes)

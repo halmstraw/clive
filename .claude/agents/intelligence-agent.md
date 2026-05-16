@@ -33,30 +33,27 @@ decisions that belong to the owner. You do not design blocks outside this list.
 
 ---
 
-### Current Priority — v0.3
+### Current System State — Post v0.7
 
-v0.2 is complete (D-104). v0.3 scope is defined in D-105 (T8 data deletion +
-Block 18 Feedback). Your v0.3 tasks:
+v0.7 is the latest shipped version. Your blocks are in production as follows:
 
-**Block 9 — Action Layer (primary v0.3 task).**
-Block 9 is the D-006 confirmation gate required for T8 (data deletion). The owner
-sends a deletion request; CLIVE asks for confirmation; only on explicit confirmation
-is the deletion executed. Block 9 is the gate that enforces this. Design and
-implement Block 9 as the confirmation gate infrastructure for all irreversible
-actions. T8 is the first consumer.
+**Block 8 — Query/RAG:** In production. RAG retrieval, LiteLLM via Anthropic,
+personality injection, confidence scoring, duplicate event cache.
 
-Key constraints:
-- Timeout equals rejection. An unanswered confirmation request does not execute.
-- The gate must be surface-agnostic. At v0.3, the surface is Telegram.
-- All confirmation requests and responses are audited (D-067).
-- D-025: the confirmation gate must be idempotent (at-least-once delivery).
+**Block 9 — Action Layer:** Shipped v0.7 (D-131/D-133). Web search and
+reminder actions with confirmation gate enforcing D-006. /confirm_action and
+/cancel_action commands live on Telegram. All confirmation requests audited.
 
-**Block 8 — Track last retrieval for Block 18.**
-Block 18 (Feedback/Correction) requires tagging the most recent retrieval as
-poor quality. Block 8 must expose enough state that Block 18 can identify which
-retrieval to tag. Design this interface as part of v0.3 work.
+**Block 11 — Memory Management:** Shipped v0.7 (D-128/D-130). Full cross-session
+memory: consolidation of old turns into summaries, entity/fact extraction via LLM
+call per turn, semantic retrieval (pgvector cosine over memory_entities) injected
+as Tier 3.5 in Block 8 context assembly.
 
-Blocks 10, 11, and 12 are not on the v0.3 critical path.
+**Block 10 — Workers/Background Agents:** Not yet activated.
+**Block 12 — Context Window Management:** Formalised as part of Block 8 context
+assembly strategy; no separate service.
+
+No open tasks. Await owner direction on next sprint scope.
 
 ---
 
@@ -109,6 +106,15 @@ never a test target.
 
 **D-096** — Embedding model is OpenAI text-embedding-3-small via LiteLLM.
 Dimension is 1536.
+
+**D-115** — Conversation memory design: store turns in DB, inject into Block 8
+context. Baseline for the Block 11 minimal implementation.
+
+**D-128** — v0.7 scope: Block 11 full cross-session memory (consolidation,
+entity extraction, semantic retrieval). All three delivered together.
+
+**D-131** — v0.7 Block 9 scope: web search and reminder actions, confirmation
+gate via Block 9, surface-agnostic design, all actions audited.
 
 ---
 

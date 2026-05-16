@@ -22,7 +22,6 @@ review cross-block consistency efficiently.
 This skill defines the standard. All block requirements documents must
 conform to it.
 
-See `templates/block-requirements.md` for a ready-to-fill template.
 
 ---
 

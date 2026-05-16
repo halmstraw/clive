@@ -33,32 +33,34 @@ decisions that belong to the owner. You do not design blocks outside this list.
 
 ---
 
-### Current Priority — v0.3
+### Current System State — Post v0.7
 
-v0.2 is complete (D-104). Blocks 14 and 15 are implemented. v0.3 scope is
-defined in D-105 (T8 data deletion + Block 18 Feedback). Your v0.3 tasks:
+v0.7 is the latest shipped version. Your blocks are in production as follows:
 
-**T8 — Deletion pipeline (Blocks 14, 15, 16).**
-The owner can now ingest documents but cannot remove them. T8 adds deletion.
-When the Block 9 confirmation gate (Intelligence Agent's responsibility)
-confirms a deletion:
-- All chunks for the document must be removed from clive_search.chunks
-- The raw file must be removed from MinIO clive-raw
-- Any metadata referencing the document must be cleaned up
-- Deletion must be idempotent (D-025)
-Design the deletion pipeline requirements. Block 9 provides the confirmation
-event; Blocks 14/15/16 execute the deletion. No deletion executes without
-Block 9 confirmation (D-006).
+**Block 14 — Ingestion:** In production. Caption command pattern for desktop
+(D-101), document-received trigger for mobile (D-114). 10 MB size limit (D-098).
+/list command shows ingested documents.
 
-**Block 18 — Feedback / Correction.**
-Block 18 was deferred from v0.2 (D-100). v0.3 is its release. Design:
-- How feedback (poor retrieval quality tag) is stored in Block 16
-- What the feedback record contains: retrieval ID, timestamp, owner signal,
-  relevant chunk IDs (if identifiable)
-- How Block 8 exposes the last retrieval so Block 18 can reference it
-- No Evolution Engine dependency at v0.3
+**Block 15 — Processing:** In production. Fixed-size chunking 512 tokens /
+50-token overlap (D-097), text-embedding-3-small via LiteLLM (D-096), writes
+to clive_search.chunks.
 
-Block 17 remains deferred.
+**Block 16 — Storage:** In production. PostgreSQL + pgvector three-schema layout
+(clive_search, clive_state, clive_audit), MinIO raw store. memory_entities and
+conversation_summaries tables added v0.7 (D-128). llm_usage table added v0.6
+(D-125). feedback table in clive_state (D-110). pending_actions table with
+metadata jsonb (D-131/D-133).
+
+**T8 — Deletion pipeline:** Shipped v0.3 (D-109/D-110). /delete <filename>
+with confirmation gate. Chunks removed from clive_search.chunks, raw file
+removed from MinIO. Idempotent (D-025).
+
+**Block 18 — Feedback/Correction:** Shipped v0.3 (D-110). /bad command writes
+to clive_state.feedback with retrieval_id, timestamp, feedback_type=poor_quality.
+
+**Block 17 — Tool/Plugin Registry:** Deferred. Do not activate.
+
+No open tasks. Await owner direction on next sprint scope.
 
 ---
 
@@ -110,6 +112,11 @@ ingest.rejected event.
 in scope per D-105.
 
 **D-101** — Telegram /ingest uses caption command pattern.
+
+**D-109** — Telegram deletion command uses /delete <filename> — direct single-step
+pattern. Source_key lookup uses LIKE '%/' || filename suffix.
+
+**D-110** — CLIVE v0.3 signed off. T8 deletion and Block 18 feedback both live.
 
 ---
 

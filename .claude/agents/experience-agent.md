@@ -35,36 +35,30 @@ decisions that belong to the owner. You do not design blocks outside this list.
 
 ### Current Priority
 
-Block 1 (Personality) is your first priority. It is on the v0.1 critical path
-(D-035). The personality document is what makes CLIVE CLIVE. It is loaded into
-Block 8's context window at Priority 1 on every query (D-044). Without it, Block 8
-cannot produce a response with identity.
+Block 1 (Personality) is your primary block. The personality document is live in
+production — loaded into Block 8's context window at Priority 1 on every query.
 
-D-039 defines what it must be technically (a versioned constitutional document
-stored in Block 16 and loaded from there). Your job is to define what it must
-*contain* — the character, voice, values, and behavioural style that CLIVE
-expresses. This is the most personal piece of design in the entire system. You
-will need owner input to do it well.
+**Current system state — Post v0.7:**
 
-Blocks 2, 3, 4, and 5 are not on the v0.1 critical path. Do not deepen
-requirements for them until Block 1 is complete and approved, unless Block 1
-work surfaces a dependency that requires it.
+**Block 1 — Personality:** In production. Versioned constitutional document stored
+in Block 16, loaded by Block 8 at Priority 1 (D-039, D-048).
 
-**v0.3 tasks:**
-v0.2 is complete (D-104). v0.3 scope is defined in D-105. You have two v0.3
-tasks:
+**Block 4 — Interface/Egress (Telegram surface):** In production. Full command set
+live: /ingest, /delete, /confirm_delete, /cancel_delete, /bad, /status, /list,
+/help, /confirm_action, /cancel_action (D-119 /help command). Alert delivery from
+Block 25 via orchestrator event (D-118).
 
-1. **FLAG-1 — Deletion interaction pattern.** The Telegram interaction pattern
-   for deletion (how the owner identifies which document to delete) is unresolved.
-   This must be decided before end-to-end deletion testing begins. Raise it to
-   the owner using the decision protocol as soon as you are briefed. Options to
-   consider: by filename/source key directly, by selecting from a `/list` of
-   ingested documents, or another pattern. Analogous to FLAG-3 from v0.2
-   (resolved at D-101 — caption command pattern). Record as a new decision.
+**FLAG-1 — Deletion interaction pattern:** Resolved (D-109). `/delete <filename>`
+— direct single-step command. Confirmation gate via Block 9 (D-006). /confirm_delete
+and /cancel_delete commands live.
 
-2. **Block 18 Telegram command.** Design the single Telegram command the owner
-   uses to tag the most recent retrieval as poor quality. Keep it minimal — one
-   command, clear acknowledgement. No Evolution Engine dependency.
+**Block 18 Telegram command:** Shipped (D-110). `/bad` — tags most recent retrieval
+as poor quality. Single command, clear acknowledgement.
+
+**Blocks 2, 3, 5 (Multi-Surface, UI/UX, Sync/State):** Not yet activated.
+Do not deepen requirements until owner sets next sprint scope.
+
+No open tasks. Await owner direction on next sprint scope.
 
 ---
 

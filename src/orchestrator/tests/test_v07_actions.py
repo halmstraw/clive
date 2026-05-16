@@ -277,7 +277,7 @@ class TestReminderPoll:
 
         push_calls = []
 
-        async def mock_post(url, **kwargs):
+        def mock_post(url, **kwargs):
             push_calls.append(url)
             r = MagicMock()
             r.raise_for_status = MagicMock()
@@ -341,9 +341,7 @@ class TestReminderPoll:
             await asyncio.sleep(0)
             await asyncio.sleep(0)
             task.cancel()
-            try:
+            with pytest.raises(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         mock_client.post.assert_not_called()

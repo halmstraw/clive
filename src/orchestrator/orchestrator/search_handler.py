@@ -47,13 +47,13 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
 
     if not query:
         log.warning("search_handler_missing_query", event_id=str(event.event_id))
-        await _push_error(chat_id, "Search failed: no query provided.")
+        await _push_error("Search failed: no query provided.")
         return
 
     api_key = os.environ.get("SEARCH_API_KEY", "")
     if not api_key:
         log.error("search_handler_no_api_key")
-        await _push_error(chat_id, "Search not available: `SEARCH_API_KEY` not configured.")
+        await _push_error("Search not available: `SEARCH_API_KEY` not configured.")
         return
 
     provider = os.environ.get("SEARCH_API_PROVIDER", "brave").lower()
@@ -62,7 +62,7 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
         results = await _call_provider(provider, query, api_key)
     except Exception as exc:
         log.error("search_api_failed", provider=provider, error=str(exc))
-        await _push_error(chat_id, f"Search failed: could not reach search provider ({exc}).")
+        await _push_error(f"Search failed: could not reach search provider ({exc}).")
         return
 
     if not results:
@@ -156,7 +156,7 @@ async def _serpapi_search(query: str, api_key: str) -> list[dict[str, Any]]:
     ]
 
 
-async def _push_error(chat_id: int, message: str) -> None:
+async def _push_error(message: str) -> None:
     """Push an error message to the owner via Block 23."""
     telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
     try:

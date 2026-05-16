@@ -25,7 +25,6 @@ def test_compute_cost_known_model_sonnet():
         prompt_tokens=1000,
         completion_tokens=500,
     )
-    # 1000 * 0.000003 + 500 * 0.000015 = 0.003 + 0.0075 = 0.0105
     assert abs(cost - 0.0105) < 1e-9
 
 
@@ -35,19 +34,18 @@ def test_compute_cost_known_model_haiku():
         prompt_tokens=2000,
         completion_tokens=1000,
     )
-    # 2000 * 0.00000025 + 1000 * 0.00000125 = 0.0005 + 0.00125 = 0.00175
     assert abs(cost - 0.00175) < 1e-9
 
 
 def test_compute_cost_unknown_model_returns_zero():
     """Unknown models return 0.0 without raising (D-125)."""
     cost = compute_cost("unknown/mystery-model", prompt_tokens=100, completion_tokens=50)
-    assert cost == 0.0
+    assert cost == pytest.approx(0.0)
 
 
 def test_compute_cost_zero_tokens():
     cost = compute_cost("anthropic/claude-sonnet-4-20250514", 0, 0)
-    assert cost == 0.0
+    assert cost == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +54,7 @@ def test_compute_cost_zero_tokens():
 
 def test_get_daily_cap_set():
     with patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "10.50"}):
-        assert get_daily_cap() == 10.50
+        assert get_daily_cap() == pytest.approx(10.50)
 
 
 def test_get_daily_cap_unset():
@@ -102,7 +100,7 @@ async def test_get_today_spend_usd_returns_zero_on_db_error():
     """DB failure is non-fatal — returns 0.0 (errs on side of allowing call)."""
     with patch("query.spend.get_pool", side_effect=RuntimeError("pool not ready")):
         result = await get_today_spend_usd()
-    assert result == 0.0
+    assert result == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +121,7 @@ async def test_spend_cap_blocks_llm_call_and_emits_event():
 
     emitted_events: list[dict] = []
 
-    async def fake_emit(event_type: str, payload: dict) -> None:
+    def fake_emit(event_type: str, payload: dict) -> None:
         emitted_events.append({"event_type": event_type, **payload})
 
     with (
@@ -155,7 +153,7 @@ async def test_spend_cap_blocks_llm_call_and_emits_event():
     # cost.cap_exceeded must have been emitted
     cap_events = [e for e in emitted_events if e["event_type"] == "cost.cap_exceeded"]
     assert len(cap_events) == 1
-    assert cap_events[0]["cap_usd"] == 1.00
+    assert cap_events[0]["cap_usd"] == pytest.approx(1.00)
 
     # query.response must have been emitted (canned message)
     response_events = [e for e in emitted_events if e["event_type"] == "query.response"]

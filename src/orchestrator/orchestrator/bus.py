@@ -99,8 +99,7 @@ class EventBus:
                 queue_key=queue_key,
                 event_id=str(event.event_id),
             )
-            # TODO: emit capacity alert to Block 4 (D-028)
-            # This requires Block 4 to be operational
+            # Block 4 alert deferred until Block 4 is operational (D-028)
             return
 
         await queue.put(event)
@@ -183,7 +182,7 @@ class EventBus:
             event_id=str(event.event_id),
             subscriber_block=block_id,
         )
-        # TODO: notify owner via Block 4 when operational
+        # Owner notification deferred until Block 4 is operational
 
     def set_override(self, active: bool) -> None:
         """Activate or deactivate system override (D-006)."""

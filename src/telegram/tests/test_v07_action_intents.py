@@ -75,7 +75,7 @@ class TestReminderIntentDetection:
     def test_remind_me_to_at(self):
         result = detect_reminder_intent("remind me to call mum at 5:30pm")
         assert result is not None
-        msg, fire_at = result
+        msg, _ = result
         assert msg == "call mum"
 
     def test_case_insensitive(self):

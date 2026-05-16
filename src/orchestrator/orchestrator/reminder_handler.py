@@ -31,6 +31,7 @@ from .events.schema import CLIVEEvent
 log = structlog.get_logger()
 
 POLL_INTERVAL = 30  # seconds
+_TELEGRAM_DEFAULT_URL = "http://telegram:8082"
 
 _pool: asyncpg.Pool | None = None
 
@@ -66,14 +67,14 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
             message_present=bool(message),
             fire_at_present=bool(fire_at_iso),
         )
-        await _push_error(chat_id, "Could not schedule reminder: missing message or time.")
+        await _push_error("Could not schedule reminder: missing message or time.")
         return
 
     try:
         fire_at = datetime.fromisoformat(fire_at_iso)
     except ValueError as exc:
         log.error("reminder_invalid_fire_at", fire_at_iso=fire_at_iso, error=str(exc))
-        await _push_error(chat_id, "Could not schedule reminder: invalid time format.")
+        await _push_error("Could not schedule reminder: invalid time format.")
         return
 
     reminder_id = uuid.uuid4()
@@ -102,7 +103,7 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
 
     # Confirm to the owner (Block 23 already showed confirmation prompt;
     # this is the post-confirm acknowledgement).
-    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
+    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", _TELEGRAM_DEFAULT_URL)
     display_time = fire_at.strftime("%Y-%m-%d %H:%M %Z").strip()
     try:
         async with httpx.AsyncClient() as client:
@@ -176,7 +177,7 @@ async def _fire_due_reminders(telegram_url: str) -> None:
 
 async def reminder_poll() -> None:
     """Background task: fire due reminders every POLL_INTERVAL seconds."""
-    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
+    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", _TELEGRAM_DEFAULT_URL)
 
     while True:
         await asyncio.sleep(POLL_INTERVAL)
@@ -186,8 +187,8 @@ async def reminder_poll() -> None:
             log.error("reminder_poll_error", error=str(exc))
 
 
-async def _push_error(chat_id: int, message: str) -> None:
-    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
+async def _push_error(message: str) -> None:
+    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", _TELEGRAM_DEFAULT_URL)
     try:
         async with httpx.AsyncClient() as client:
             await client.post(

@@ -197,14 +197,14 @@ def test_assemble_without_memory_entities_produces_same_output_as_before():
     """assemble() with memory_entities=[] is identical to calling without parameter."""
     from query.context import assemble
 
-    kwargs = dict(
-        personality="You are CLIVE.",
-        alignment_rules="No fabrication.",
-        conversation_history=[{"role": "user", "content": "Hello"}],
-        retrieved_chunks=[
+    kwargs = {
+        "personality": "You are CLIVE.",
+        "alignment_rules": "No fabrication.",
+        "conversation_history": [{"role": "user", "content": "Hello"}],
+        "retrieved_chunks": [
             {"content": "Fact A", "source_attribution": "doc1", "relevance_score": 0.9}
         ],
-    )
+    }
 
     result_default = assemble(**kwargs)
     result_empty = assemble(**kwargs, memory_entities=[])

@@ -42,6 +42,7 @@
     - 09_v06_tables.sql
     - 10_v07_memory_tables.sql
     - 10_v07_actions_tables.sql
+    - 11_v07_pending_actions_metadata.sql
 
 - name: Create observability config directories on VM
   ansible.builtin.file:

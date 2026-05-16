@@ -180,6 +180,7 @@ async def test_owner_confirmed_emits_action_confirmed(mock_pool_factory):
         "chat_id": 12345,
         "status": "pending",
         "expires_at": expires_at,
+        "metadata": "{}",
     }
     pool, conn = mock_pool_factory(fetchrow_return=db_row)
     conn.__aenter__ = AsyncMock(return_value=conn)
@@ -217,6 +218,7 @@ async def test_owner_rejected_emits_action_rejected(mock_pool_factory):
         "chat_id": 12345,
         "status": "pending",
         "expires_at": now + timedelta(seconds=120),
+        "metadata": "{}",
     }
     pool, conn = mock_pool_factory(fetchrow_return=db_row)
     conn.__aenter__ = AsyncMock(return_value=conn)
@@ -255,6 +257,7 @@ async def test_expired_action_emits_rejection(mock_pool_factory):
         "chat_id": 12345,
         "status": "pending",
         "expires_at": expired_at,
+        "metadata": "{}",
     }
     pool, conn = mock_pool_factory(fetchrow_return=db_row)
     conn.__aenter__ = AsyncMock(return_value=conn)

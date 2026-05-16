@@ -35,6 +35,7 @@
     - 09_v06_tables.sql
     - 10_v07_memory_tables.sql
     - 10_v07_actions_tables.sql
+    - 11_v07_pending_actions_metadata.sql
 
 - name: Run SQL init scripts (idempotent)
   ansible.builtin.shell:
@@ -51,6 +52,7 @@
     - 09_v06_tables.sql
     - 10_v07_memory_tables.sql
     - 10_v07_actions_tables.sql
+    - 11_v07_pending_actions_metadata.sql
   become: true
   become_user: clive
   changed_when: true

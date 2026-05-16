@@ -27,6 +27,7 @@ chat.  Production flows never set this flag.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -93,6 +94,12 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ACTION_TIMEOUT_SECONDS)
 
+    _STANDARD_FIELDS = {
+        "action_request_id", "action_type", "action_target", "action_description",
+        "chat_id", "suppress_telegram", "conversation_id",
+    }
+    metadata = {k: v for k, v in payload.items() if k not in _STANDARD_FIELDS}
+
     pool = _get_pool()
     async with pool.acquire() as conn:
         # D-025: idempotent insert — if already exists, just re-send confirmation
@@ -118,8 +125,8 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
                 """
                 INSERT INTO clive_state.pending_actions
                     (action_request_id, action_type, action_target, action_description,
-                     conversation_id, chat_id, status, created_at, expires_at)
-                VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)
+                     conversation_id, chat_id, status, created_at, expires_at, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)
                 ON CONFLICT (action_request_id) DO NOTHING
                 """,
                 action_request_id,
@@ -130,6 +137,7 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
                 chat_id,
                 now,
                 expires_at,
+                json.dumps(metadata),
             )
             log.info(
                 "action_pending_stored",
@@ -182,7 +190,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
         row = await conn.fetchrow(
             """
             SELECT action_type, action_target, action_description,
-                   conversation_id, chat_id, status, expires_at
+                   conversation_id, chat_id, status, expires_at, metadata
             FROM clive_state.pending_actions
             WHERE action_request_id = $1
             """,
@@ -236,6 +244,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
 
     if confirmed:
         await _resolve_action(action_request_id, "confirmed")
+        stored_metadata = json.loads(row["metadata"]) if row["metadata"] else {}
         confirmed_event = CLIVEEvent(
             event_type=ACTION_CONFIRMED,
             source_block=9,
@@ -247,6 +256,7 @@ async def handle_action_owner_response(event: CLIVEEvent) -> None:
                 "action_description": row["action_description"],
                 "chat_id": row["chat_id"],
                 "suppress_telegram": suppress_telegram,
+                **stored_metadata,
             },
         )
         await audit.write(confirmed_event, AlignmentResult.PASS, "emitted")

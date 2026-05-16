@@ -22,17 +22,25 @@ v0.3 additions:
   /confirm_delete         — owner confirms pending deletion
   /cancel_delete          — owner cancels pending deletion
   /bad                    — Block 18: tag most recent retrieval as poor quality
+
+v0.7 additions:
+  intent detection in handle_message for web.search and reminder.schedule
+  /confirm_action         — generic confirm for non-delete action types
+  /cancel_action          — generic cancel for non-delete action types
 """
 
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import uuid
 from typing import Any
 
 import httpx
 import structlog
+from dateutil import parser as dateutil_parser
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -41,6 +49,60 @@ from .db import get_pool
 from .minio_client import upload_document
 from .metrics import rate_limited_total, telegram_commands_total
 from .session import sessions
+
+
+# ---------------------------------------------------------------------------
+# v0.7 — Action intent detection patterns
+# ---------------------------------------------------------------------------
+
+_SEARCH_RE = re.compile(
+    r"^(?:search(?:\s+(?:for|the\s+web\s+for|online\s+for))?|look\s+up|find(?:\s+online)?)"
+    r"\s+(.+)$",
+    re.IGNORECASE,
+)
+
+_REMINDER_RE = re.compile(
+    r"^remind\s+me\s+(?:about|to)\s+(.+?)\s+at\s+(.+)$",
+    re.IGNORECASE,
+)
+
+
+def _get_tz() -> ZoneInfo:
+    tz_name = os.environ.get("CLIVE_TIMEZONE", "UTC")
+    try:
+        return ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def detect_search_intent(text: str) -> str | None:
+    """Return the search query if text matches a web search intent, else None."""
+    m = _SEARCH_RE.match(text.strip())
+    return m.group(1).strip() if m else None
+
+
+def detect_reminder_intent(text: str) -> tuple[str, datetime] | None:
+    """Return (message, fire_at) if text matches a reminder intent, else None.
+
+    Uses CLIVE_TIMEZONE env var for timezone-aware parsing (option B+C).
+    Returns None if the time string cannot be parsed.
+    """
+    m = _REMINDER_RE.match(text.strip())
+    if not m:
+        return None
+
+    reminder_msg = m.group(1).strip()
+    time_str = m.group(2).strip()
+    tz = _get_tz()
+
+    try:
+        default_dt = datetime.now(tz)
+        fire_at = dateutil_parser.parse(time_str, default=default_dt, fuzzy=True)
+        if fire_at.tzinfo is None:
+            fire_at = fire_at.replace(tzinfo=tz)
+        return reminder_msg, fire_at
+    except (ValueError, OverflowError):
+        return None
 
 log = structlog.get_logger()
 
@@ -60,6 +122,11 @@ _pending_activations: dict[int, tuple[str, str]] = {}
 # Set when Block 13 pushes action.confirmation_requested.
 # Cleared on /confirm_delete, /cancel_delete, or timeout notification.
 _pending_deletes: dict[int, str] = {}
+
+# Block 9 v0.7 — generic pending action state: chat_id → action_request_id
+# Used for web.search and reminder.schedule action types.
+# Cleared on /confirm_action, /cancel_action, or timeout notification.
+_pending_action_generic: dict[int, str] = {}
 
 # Block 18 — last retrieval per chat_id: chat_id → {event_id, chunk_ids, conversation_id}
 # Updated each time a query.response is delivered.
@@ -87,6 +154,41 @@ async def _emit_to_orchestrator(event_type: str, payload: dict[str, Any]) -> Non
             timeout=10.0,
         )
         response.raise_for_status()
+
+
+async def _emit_action_pending(
+    action_type: str,
+    action_target: str,
+    action_description: str,
+    conversation_id: uuid.UUID,
+    chat_id: int,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Emit action.pending for any action type (D-006, D-003)."""
+    event_id = uuid.uuid4()
+    payload: dict[str, Any] = {
+        "action_type": action_type,
+        "action_target": action_target,
+        "action_description": action_description,
+        "chat_id": chat_id,
+    }
+    if extra:
+        payload.update(extra)
+
+    await _emit_to_orchestrator(
+        "action.pending",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": payload,
+        },
+    )
+    log.info(
+        "action_pending_emitted",
+        action_type=action_type,
+        action_target=action_target,
+        chat_id=chat_id,
+    )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -139,6 +241,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         conversation_id=str(conversation_id),
         event_id=str(event_id),
     )
+
+    # v0.7 — Intent detection: web search or reminder take priority over query.received
+    search_query = detect_search_intent(user_input)
+    if search_query is not None:
+        await _emit_action_pending(
+            action_type="web.search",
+            action_target=search_query,
+            action_description=f"Search the web for: {search_query}",
+            conversation_id=conversation_id,
+            chat_id=chat_id,
+        )
+        return
+
+    reminder_result = detect_reminder_intent(user_input)
+    if reminder_result is not None:
+        reminder_msg, fire_at = reminder_result
+        display_time = fire_at.strftime("%Y-%m-%d %H:%M %Z").strip()
+        await _emit_action_pending(
+            action_type="reminder.schedule",
+            action_target=reminder_msg,
+            action_description=f"Schedule reminder: \"{reminder_msg}\" at {display_time}",
+            conversation_id=conversation_id,
+            chat_id=chat_id,
+            extra={"reminder_message": reminder_msg, "fire_at": fire_at.isoformat()},
+        )
+        return
 
     # Emit query.received with auth metadata attached (D-058)
     await _emit_to_orchestrator(
@@ -786,11 +914,11 @@ async def handle_cancel_delete(update: Update, context: ContextTypes.DEFAULT_TYP
 async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat_id: int) -> None:
     """Receive action.confirmation_requested from Block 13 and prompt the owner.
 
-    Stores the action_request_id so /confirm_delete and /cancel_delete can
-    reference it. Sends confirmation prompt to the owner.
+    Routes to the correct pending dict and shows appropriate confirm/cancel commands
+    based on action_type (v0.7: document.delete keeps specific commands; all other
+    types use generic /confirm_action / /cancel_action).
 
     suppress_telegram: if True in the payload, skips the Telegram send.
-    Used by the E2E test suite to prevent test messages reaching the owner chat.
     """
     if confirmation_payload.get("suppress_telegram"):
         log.info("suppress_telegram_confirmation", reason="suppress_telegram=True in payload")
@@ -798,13 +926,20 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
 
     action_request_id = confirmation_payload.get("action_request_id", "")
     action_description = confirmation_payload.get("action_description", "")
+    action_type = confirmation_payload.get("action_type", "")
 
-    # Store for /confirm_delete / /cancel_delete
-    _pending_deletes[chat_id] = action_request_id
+    if action_type == "document.delete":
+        _pending_deletes[chat_id] = action_request_id
+        confirm_cmd = "/confirm_delete"
+        cancel_cmd = "/cancel_delete"
+    else:
+        _pending_action_generic[chat_id] = action_request_id
+        confirm_cmd = "/confirm_action"
+        cancel_cmd = "/cancel_action"
 
     text = (
         f"⚠️ {action_description}\n\n"
-        "Reply /confirm_delete to proceed or /cancel_delete to abort.\n"
+        f"Reply {confirm_cmd} to proceed or {cancel_cmd} to abort.\n"
         "(No response within 2 minutes cancels automatically.)"
     )
 
@@ -813,6 +948,7 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
         log.info(
             "confirmation_prompt_sent",
             chat_id=chat_id,
+            action_type=action_type,
             action_request_id=action_request_id,
         )
 
@@ -820,12 +956,13 @@ async def deliver_action_confirmation(confirmation_payload: dict[str, Any], chat
 async def deliver_action_outcome(outcome_payload: dict[str, Any], chat_id: int) -> None:
     """Receive action.rejected from Block 13 and notify the owner.
 
-    Clears the pending delete state regardless of reason.
+    Clears pending state for all action types regardless of reason.
 
     suppress_telegram: if True in the payload, skips the Telegram send.
     """
-    # Clear pending state regardless of suppress flag
+    # Clear pending state for all action types
     _pending_deletes.pop(chat_id, None)
+    _pending_action_generic.pop(chat_id, None)
 
     if outcome_payload.get("suppress_telegram"):
         log.info("suppress_telegram_outcome", reason="suppress_telegram=True in payload")
@@ -979,6 +1116,92 @@ async def handle_bad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
     await update.message.reply_text("Noted. Tagged as poor quality.")
+
+
+# ---------------------------------------------------------------------------
+# v0.7 — Generic action confirmation commands (web.search, reminder.schedule)
+# ---------------------------------------------------------------------------
+
+async def handle_confirm_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/confirm_action — owner confirms a pending generic action (v0.7).
+
+    Emits action.owner_response with confirmed=True to Block 13 → Block 9.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="other").inc()
+
+    action_request_id = _pending_action_generic.get(chat_id)
+    if not action_request_id:
+        await update.message.reply_text(
+            "No pending action to confirm."
+        )
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    await _emit_to_orchestrator(
+        "action.owner_response",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "action_request_id": action_request_id,
+                "confirmed": True,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    _pending_action_generic.pop(chat_id, None)
+
+    log.info("generic_action_confirmed_by_owner", chat_id=chat_id, action_request_id=action_request_id)
+    await update.message.reply_text("Confirmed.")
+
+
+async def handle_cancel_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/cancel_action — owner cancels a pending generic action (v0.7).
+
+    Emits action.owner_response with confirmed=False to Block 13 → Block 9.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="other").inc()
+
+    action_request_id = _pending_action_generic.pop(chat_id, None)
+    if not action_request_id:
+        await update.message.reply_text("No pending action to cancel.")
+        return
+
+    conversation_id = sessions.get_or_create(chat_id)
+    event_id = uuid.uuid4()
+
+    await _emit_to_orchestrator(
+        "action.owner_response",
+        {
+            "event_id": str(event_id),
+            "conversation_id": str(conversation_id),
+            "payload": {
+                "action_request_id": action_request_id,
+                "confirmed": False,
+                "chat_id": chat_id,
+            },
+        },
+    )
+
+    log.info("generic_action_cancelled_by_owner", chat_id=chat_id, action_request_id=action_request_id)
+    await update.message.reply_text("Cancelled.")
 
 
 # ---------------------------------------------------------------------------

@@ -73,6 +73,9 @@ SYSTEM_OVERRIDE_ACTIVE = "system.override.active"
 CONFIG_CHANGED = "config.changed"
 SECURITY_ANOMALY_DETECTED = "security.anomaly.detected"
 
+# v0.7 — Block 9 Action Layer: web search and reminder action types
+REMINDER_FIRED = "reminder.fired"       # orchestrator polling → Block 23
+
 # Orchestrator-emitted
 ALIGNMENT_REJECTED = "alignment.rejected"
 DELIVERY_FAILED = "delivery.failed"

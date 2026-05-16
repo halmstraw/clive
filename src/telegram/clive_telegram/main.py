@@ -18,6 +18,10 @@ v0.4 additions:
 
 v0.5 additions:
   /metrics — Prometheus scrape endpoint (D-122 Phase 2)
+
+v0.7 additions:
+  /confirm_action — generic confirm for web.search and reminder.schedule
+  /cancel_action  — generic cancel for web.search and reminder.schedule
 """
 
 from __future__ import annotations
@@ -42,7 +46,9 @@ from .bot import (
     deliver_response,
     handle_activate,
     handle_bad,
+    handle_cancel_action,
     handle_cancel_delete,
+    handle_confirm_action,
     handle_confirm_activate,
     handle_confirm_delete,
     handle_delete,
@@ -175,6 +181,10 @@ async def main() -> None:
 
     # v0.3 — Block 18 feedback command
     application.add_handler(CommandHandler("bad", handle_bad))
+
+    # v0.7 — generic action confirmation commands (web.search, reminder.schedule)
+    application.add_handler(CommandHandler("confirm_action", handle_confirm_action))
+    application.add_handler(CommandHandler("cancel_action", handle_cancel_action))
 
     # v0.4 — mobile ingest and new commands (D-114)
     application.add_handler(CommandHandler("ingest_confirm", handle_ingest_confirm))

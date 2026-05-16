@@ -89,6 +89,7 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
         run: |
           {
             echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
@@ -106,6 +107,7 @@ jobs:
             echo "GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}"
             echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
             echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
+            echo "SEARCH_API_KEY=${SEARCH_API_KEY}"
           } > /etc/clive/secrets.env
           chmod 600 /etc/clive/secrets.env
 

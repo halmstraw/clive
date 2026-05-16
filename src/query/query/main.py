@@ -11,6 +11,9 @@ Block 8 via HTTP POST to /query endpoint.
 
 v0.5: /metrics endpoint added for Prometheus scraping (D-122 Phase 2).
 v0.6: DB pool initialised on startup for LLM usage tracking (D-125).
+v0.8: Tool registry warmed at startup (D-137). registry.refresh() is called
+      after the DB pool is ready so the first query is served from a non-empty
+      cache rather than triggering a DB fetch mid-request.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import db as query_db
 from .handler import handle_query
+from .registry import registry
 
 load_dotenv("/etc/clive/secrets.env")
 
@@ -57,8 +61,14 @@ async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
 async def main() -> None:
     log.info("query_service_starting", block=8)
 
-    # Initialise DB pool for LLM usage tracking (D-125, v0.6)
+    # Initialise DB pool for LLM usage tracking and registry reads (D-125, v0.6)
     await query_db.init_pool()
+
+    # Warm the tool registry cache — v0.8 (D-137)
+    # Called after init_pool() so get_pool() is available.
+    # On DB failure, refresh() logs and continues with an empty cache;
+    # the service still starts and handles pure-query requests normally.
+    await registry.refresh()
 
     app = web.Application()
     app.router.add_post("/query", handle_query_endpoint)

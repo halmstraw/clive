@@ -16,6 +16,13 @@ v0.7: Block 11 full cross-session memory additions (D-128):
   - EMBEDDING_MODEL / embed() / embed_batch(): 1536-dim embeddings (D-096)
   - extract_entities(): lightweight LLM extraction pass post-response
   - summarise_turns(): LLM consolidation call with embedding for summaries
+
+v0.8: Block 17 Tool Registry integration (D-137):
+  - complete() accepts optional available_tools list (any object with
+    .tool_name and .description attributes — ToolDescriptor from registry.py).
+  - Tool list injected as a dedicated system prompt section: tool_name +
+    description only. permission_scope is NEVER exposed to the LLM (D-138).
+  - Empty tool list → system prompt states no actions are available.
 """
 
 from __future__ import annotations
@@ -63,6 +70,28 @@ def get_model() -> str:
     return os.environ.get("CLIVE_LLM_MODEL", DEFAULT_MODEL)
 
 
+def _build_tools_section(available_tools: list[Any]) -> str:
+    """Format available tools for the system prompt.
+
+    Exposes tool_name + description only. permission_scope is deliberately
+    excluded — internal field, must not be visible to the LLM (D-138).
+
+    Args:
+        available_tools: list of objects with .tool_name and .description
+                         (ToolDescriptor instances from registry.py).
+
+    Returns:
+        Formatted string for the system prompt tools section.
+    """
+    if available_tools:
+        tool_lines = "\n".join(
+            f"- {t.tool_name}: {t.description}"
+            for t in available_tools
+        )
+        return f"Available actions:\n{tool_lines}"
+    return "No actions are currently available."
+
+
 # ── Completion ────────────────────────────────────────────────────────────────
 
 async def complete(
@@ -72,6 +101,7 @@ async def complete(
     retrieved_chunks: list[dict[str, Any]],
     user_query: str,
     memory_entities: list[dict[str, Any]] | None = None,
+    available_tools: list[Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Call LLM with assembled context.
 
@@ -79,14 +109,29 @@ async def complete(
       model, prompt_tokens, completion_tokens
 
     Context structure (D-044 priority order):
-      System prompt = personality (Tier 1) + alignment rules (Tier 2)
+      System prompt = personality (Tier 1)
+                    + alignment rules (Tier 2)
+                    + tool registry section (v0.8, D-137)
       Messages = conversation history (Tier 3) + current query with
                  memory entities (Tier 3.5) and retrieved context (Tier 4)
                  prepended (v0.7: D-128)
+
+    Args:
+        personality:          Tier 1 — personality document.
+        alignment_rules:      Tier 2 — alignment rules document.
+        conversation_history: Tier 3 — recent conversation turns.
+        retrieved_chunks:     Tier 4 — ranked knowledge chunks from Block 16.
+        user_query:           current user query.
+        memory_entities:      Tier 3.5 — entities from memory retrieval (v0.7).
+        available_tools:      live tool registry snapshot (v0.8, D-137).
+                              Passed as list of ToolDescriptor; may be [].
+                              permission_scope is NEVER included in the prompt.
     """
     model = get_model()
 
-    system_prompt = f"{personality}\n\n---\n\n{alignment_rules}"
+    # System prompt: personality + alignment + tool registry section (v0.8)
+    tools_section = _build_tools_section(available_tools or [])
+    system_prompt = f"{personality}\n\n---\n\n{alignment_rules}\n\n---\n\n{tools_section}"
 
     # Build augmented query sections in priority order
     sections: list[str] = []
@@ -123,6 +168,7 @@ async def complete(
         model=model,
         history_turns=len(conversation_history),
         memory_entities=len(memory_entities) if memory_entities else 0,
+        available_tools=len(available_tools) if available_tools else 0,
     )
 
     response = await litellm.acompletion(

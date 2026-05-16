@@ -23,6 +23,18 @@ v0.7: Block 11 full cross-session memory (D-128).
   - Post-response: extract entities from turn, store with embeddings (AC-2).
   - Post-response: run consolidation if turn count/age threshold met (AC-5).
   - All memory operations are non-fatal (caught exceptions → graceful degradation).
+
+v0.8: Block 17 Tool Registry integration (D-137, D-138).
+  - Live tool registry fetched at the start of each query (TTL-cached, 60s).
+  - Available tools injected into the LLM system prompt (name + description only;
+    permission_scope is never exposed to the LLM).
+  - Action intent detection unchanged (ACTION_VERBS heuristic).
+  - Action validation: detected verb matched against live registry via
+    _find_tool_in_registry(). Two outcomes:
+      * Tool found in registry → emit action.requested for Block 9 to handle.
+      * Tool not in registry / registry empty → no event emitted; respond with
+        "That capability is not currently available." (D-138 requirement).
+  - This is Block 8's own gate. Block 13 also validates independently (D-138).
 """
 
 from __future__ import annotations
@@ -47,12 +59,15 @@ from .metrics import (
     query_duration_seconds,
     retrieval_chunks_returned_total,
 )
+from .registry import ToolDescriptor, registry
 from .spend import compute_cost, get_daily_cap, get_today_spend_usd, record_usage
 
 log = structlog.get_logger()
 
-# Action-intent keywords — simple heuristic for v0.1
-# Evolves post-v0.1 via Block 21
+# Action-intent keywords — simple heuristic for linguistic detection.
+# These trigger the action validation path; they do NOT define what is available.
+# Tool availability is determined exclusively by the live registry (D-138).
+# Evolves post-v0.1 via Block 21.
 ACTION_VERBS = {
     "send", "email", "message", "book", "schedule", "create",
     "delete", "update", "post", "call", "order", "buy", "pay",
@@ -80,14 +95,52 @@ async def _emit_event(event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _detect_action_intent(text: str) -> str | None:
-    """Heuristic: detect if query implies an action CLIVE cannot perform.
+    """Heuristic: detect if query implies an action request.
 
-    Returns the detected action verb or None.
+    Returns the first detected action verb, or None.
+    Detection is intentionally broad — validation against the live registry
+    (via _find_tool_in_registry) determines whether the action is actually
+    executable.
     """
     words = text.lower().split()
     for word in words:
         if word in ACTION_VERBS:
             return word
+    return None
+
+
+def _find_tool_in_registry(
+    verb: str,
+    tools: list[ToolDescriptor],
+) -> ToolDescriptor | None:
+    """Find the first registry tool that relates to the detected action verb.
+
+    Matches by tokenising tool_name (underscore-split) and display_name
+    (space-split) into a word set, then checking if:
+      - the verb exactly equals any word, OR
+      - any word starts with the verb (minimum 3-char verb to avoid noise)
+
+    This allows "remind" to match "reminder", "search" to match "web_search",
+    and "delete" to match "delete_document" without hardcoding any tool names.
+    Tool names are sourced exclusively from the live registry.
+
+    Args:
+        verb:  detected action verb (lowercase), e.g. "remind", "search"
+        tools: snapshot of the live registry (enabled + non-deprecated only)
+
+    Returns:
+        First matching ToolDescriptor, or None if no tool matches.
+    """
+    v = verb.lower()
+    if len(v) < 3:
+        # Very short verbs (e.g. "do", "go") would match too broadly
+        return None
+    for tool in tools:
+        # Build a word set from tool_name (underscore-split) and display_name
+        words = set(tool.tool_name.split("_")) | set(tool.display_name.lower().split())
+        for word in words:
+            if word == v or word.startswith(v):
+                return tool
     return None
 
 
@@ -111,18 +164,19 @@ async def handle_query(event: dict[str, Any]) -> None:
 
     Steps:
     1.  Idempotency check (D-046)
-    2.  Action intent check (D-045)
-    3.  Retrieve system documents via orchestrator (D-043, D-048)
-    4.  Retrieve knowledge chunks via orchestrator (D-043)
-    5.  Retrieve conversation history from event payload
-    6.  Spend cap check — return canned response if exceeded (D-125)
-    7.  Semantic memory retrieval (v0.7, D-128, AC-3)
-    8.  Assemble context (D-044) — includes memory entities as Tier 3.5
-    9.  Call LLM (D-077)
-    10. Record LLM usage to clive_state.llm_usage (D-125)
-    11. Build response payload, cache, emit query.response (v0.3: include chunk_ids)
-    12. Record query duration (D-122 Phase 2)
-    13. Post-response memory operations (v0.7, D-128) — non-fatal:
+    2.  Fetch live tool registry (v0.8, D-137) — TTL-cached, 60s
+    3.  Action intent detection and registry validation (D-045, D-138)
+    4.  Retrieve system documents via orchestrator (D-043, D-048)
+    5.  Retrieve knowledge chunks via orchestrator (D-043)
+    6.  Retrieve conversation history from event payload
+    7.  Spend cap check — return canned response if exceeded (D-125)
+    8.  Semantic memory retrieval (v0.7, D-128, AC-3)
+    9.  Assemble context (D-044) — includes memory entities as Tier 3.5
+    10. Call LLM with live tool list in system prompt (D-077, v0.8 D-137)
+    11. Record LLM usage to clive_state.llm_usage (D-125)
+    12. Build response payload, cache, emit query.response (v0.3: include chunk_ids)
+    13. Record query duration (D-122 Phase 2)
+    14. Post-response memory operations (v0.7, D-128) — non-fatal:
         a. Extract entities from the turn (AC-2)
         b. Store entities with embeddings (AC-2)
         c. Consolidate old turns if threshold met (AC-5)
@@ -145,37 +199,70 @@ async def handle_query(event: dict[str, Any]) -> None:
         query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
-    # 2. Check for action intent — D-045
+    # 2. Fetch live tool registry — v0.8 (D-137)
+    # TTL-cached (60s). On DB failure, returns stale or empty cache gracefully.
+    # Used for: (a) action intent validation, (b) system prompt injection.
+    available_tools = await registry.get_tools()
+
+    # 3. Action intent detection and registry validation — D-045, D-138
+    # ACTION_VERBS heuristic detects that the user is requesting an action.
+    # _find_tool_in_registry then validates whether any live tool handles it.
+    # Block 8's own gate — Block 13 also validates independently (D-138).
     action_verb = _detect_action_intent(user_input)
     if action_verb:
-        log.info("action_intent_detected", verb=action_verb)
-        await _emit_event(
-            "action.requested_unavailable",
-            {
-                "conversation_id": str(conversation_id),
-                "event_id": str(event_id),
-                "recognised_action_type": action_verb,
-                "original_query_context": user_input,
-            },
-        )
-        # Still respond — acknowledge and offer what we can do
-        response_text = (
-            f"I can see you want to {action_verb} something — "
-            "actions aren't available yet. I can answer questions "
-            "and search my knowledge base. What would you like to know?"
-        )
+        matched_tool = _find_tool_in_registry(action_verb, available_tools)
+
+        if matched_tool:
+            # Tool is registered and enabled — route to Block 9 via Block 13.
+            # Block 9's confirmation gate (D-006) applies; Block 8 acknowledges.
+            log.info(
+                "action_intent_routed",
+                verb=action_verb,
+                tool=matched_tool.tool_name,
+            )
+            await _emit_event(
+                "action.requested",
+                {
+                    "conversation_id": str(conversation_id),
+                    "event_id": str(event_id),
+                    "tool_name": matched_tool.tool_name,
+                    "original_query_context": user_input,
+                },
+            )
+            response_text = (
+                f"I'll work on that using {matched_tool.display_name}. "
+                "I'll confirm the details with you before proceeding."
+            )
+        else:
+            # Tool not in registry / registry empty — Block 8's gate.
+            # Do NOT emit an action event (D-138 requirement).
+            log.info(
+                "action_intent_blocked",
+                verb=action_verb,
+                reason="not_in_registry",
+                available_tool_count=len(available_tools),
+            )
+            response_text = "That capability is not currently available."
+
         response_payload = {
             "event_id": str(event_id),
             "response_text": response_text,
-            "confidence": {"chunks_returned": 0, "highest_relevance_score": 0.0, "threshold_met": False},
-            "chunk_ids": [],  # No retrieval performed
+            "confidence": {
+                "chunks_returned": 0,
+                "highest_relevance_score": 0.0,
+                "threshold_met": False,
+            },
+            "chunk_ids": [],
         }
         cache.set(conversation_id, event_id, response_payload)
-        await _emit_event(_EVENT_QUERY_RESPONSE, {**response_payload, "conversation_id": str(conversation_id)})
+        await _emit_event(
+            _EVENT_QUERY_RESPONSE,
+            {**response_payload, "conversation_id": str(conversation_id)},
+        )
         query_duration_seconds.observe(time.monotonic() - start_time)
         return
 
-    # 3. Retrieve system documents via orchestrator (D-043, D-048)
+    # 4. Retrieve system documents via orchestrator (D-043, D-048)
     async with httpx.AsyncClient() as client:
         personality_resp = await client.post(
             f"{ORCHESTRATOR_URL}/retrieve/system-document",
@@ -193,7 +280,7 @@ async def handle_query(event: dict[str, Any]) -> None:
         alignment_resp.raise_for_status()
         alignment_doc = alignment_resp.json()["document_content"]
 
-    # 4. Retrieve knowledge chunks via orchestrator (D-043)
+    # 5. Retrieve knowledge chunks via orchestrator (D-043)
     async with httpx.AsyncClient() as client:
         retrieval_resp = await client.post(
             f"{ORCHESTRATOR_URL}/retrieve/knowledge",
@@ -218,10 +305,10 @@ async def handle_query(event: dict[str, Any]) -> None:
     if ranked_chunks:
         retrieval_chunks_returned_total.inc(len(ranked_chunks))
 
-    # 5. Retrieve conversation history from event payload
+    # 6. Retrieve conversation history from event payload
     conversation_history = event.get("conversation_history", [])
 
-    # 6. Spend cap gate — D-125, D-006
+    # 7. Spend cap gate — D-125, D-006
     # Check before assembling context and calling LLM.
     # Cap = pre-authorised daily limit set by owner; no confirmation dialog needed.
     daily_cap = get_daily_cap()
@@ -270,7 +357,7 @@ async def handle_query(event: dict[str, Any]) -> None:
             query_duration_seconds.observe(time.monotonic() - start_time)
             return
 
-    # 7. Semantic memory retrieval — v0.7, D-128, AC-3
+    # 8. Semantic memory retrieval — v0.7, D-128, AC-3
     # Embed the query and search clive_state.memory_entities by cosine similarity.
     # Non-fatal: any failure produces [] and query continues without memory.
     memory_entities_retrieved: list[dict[str, Any]] = []
@@ -287,7 +374,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     except Exception as exc:
         log.warning("memory_retrieval_skipped", error=str(exc))
 
-    # 8. Assemble context (D-044) — memory entities injected as Tier 3.5 (D-128)
+    # 9. Assemble context (D-044) — memory entities injected as Tier 3.5 (D-128)
     assembled = ctx.assemble(
         personality=personality_doc,
         alignment_rules=alignment_doc,
@@ -296,7 +383,9 @@ async def handle_query(event: dict[str, Any]) -> None:
         memory_entities=memory_entities_retrieved,
     )
 
-    # 9. Call LLM (D-077) — returns (text, usage_data) since v0.6
+    # 10. Call LLM (D-077, v0.8 D-137)
+    # available_tools passed so the system prompt includes the live tool list.
+    # Returns (text, usage_data) since v0.6.
     response_text, usage_data = await llm.complete(
         personality=assembled.personality,
         alignment_rules=assembled.alignment_rules,
@@ -304,9 +393,10 @@ async def handle_query(event: dict[str, Any]) -> None:
         retrieved_chunks=assembled.retrieved_chunks,
         user_query=user_input,
         memory_entities=assembled.memory_entities,
+        available_tools=available_tools,
     )
 
-    # 10. Record usage to clive_state.llm_usage (D-125)
+    # 11. Record usage to clive_state.llm_usage (D-125)
     cost_usd = compute_cost(
         usage_data["model"],
         usage_data["prompt_tokens"],
@@ -325,7 +415,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     llm_tokens_total.labels(model=model_label, type="completion").inc(usage_data["completion_tokens"])
     llm_cost_usd_total.labels(model=model_label).inc(cost_usd)
 
-    # 11. Build response and cache it
+    # 12. Build response and cache it
     # chunk_ids included so Block 18 can tag specific chunks as poor quality
     response_payload = {
         "event_id": str(event_id),
@@ -335,13 +425,13 @@ async def handle_query(event: dict[str, Any]) -> None:
     }
     cache.set(conversation_id, event_id, response_payload)
 
-    # 12. Emit query.response
+    # Emit query.response
     await _emit_event(
         _EVENT_QUERY_RESPONSE,
         {**response_payload, "conversation_id": str(conversation_id)},
     )
 
-    # Record query duration (D-122 Phase 2)
+    # 13. Record query duration (D-122 Phase 2)
     query_duration_seconds.observe(time.monotonic() - start_time)
 
     log.info(
@@ -352,9 +442,10 @@ async def handle_query(event: dict[str, Any]) -> None:
         threshold_met=confidence["threshold_met"],
         cost_usd=cost_usd,
         model=model_label,
+        available_tools=len(available_tools),
     )
 
-    # 13. Post-response memory operations — v0.7, D-128
+    # 14. Post-response memory operations — v0.7, D-128
     # These run after query.response has been emitted. Non-fatal throughout.
     # a. Extract entities from the completed turn.
     # b. Store entities with embeddings in clive_state.memory_entities.

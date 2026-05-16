@@ -554,3 +554,91 @@ response). These are different failure modes and must not be conflated.
 *Block 3 — Tool Management UX Design v0.1*  
 *Experience Agent artefact. Reviewed against Block 1 personality document v0.1.*  
 *Next version required for: any change to message text, any new tool management command.*
+
+---
+
+## Implementation Discrepancies
+
+*Recorded by: Experience Agent — post-v0.8 consistency audit, May 2026.*
+*Implementation file audited: `src/telegram/clive_telegram/bot.py`.*
+
+The following discrepancies were found between this specification and the v0.8
+implementation. The implementation must not be changed to resolve these — they
+are flags for the next version of this document. Each entry states what the
+spec says, what the implementation does, and the practical effect.
+
+---
+
+### D1 — health_status field values differ from SQL schema
+
+**Spec (Section 1.2 field table):** `health_status` is defined with values
+`ok | degraded | error`. The spec text reads: "When health_status is 'degraded'
+or 'error', append `[health: {health_status}]`."
+
+**SQL schema (`12_v08_tool_registry.sql`):** The `health_status` column is
+constrained to `CHECK (health_status IN ('healthy', 'degraded', 'unavailable'))`.
+Default value is `'healthy'`. The seed data (`13_v08_tool_registry_seed.sql`)
+populates all three tools with `'healthy'`.
+
+**Implementation (`_format_tool_entry`):** The guard condition is
+`health_status != "healthy"` — correct for the SQL schema.
+
+**Effect:** The implementation is aligned with the database schema, not with
+this spec. The spec's field table is wrong on two counts: the nominal value is
+`"healthy"` not `"ok"`, and the non-nominal error state is `"unavailable"` not
+`"error"`. If a tool's health degrades, the rendered label will be
+`[health: unavailable]`, not `[health: error]` as this spec implies.
+
+**Required fix in next version:** Update Section 1.2 field table and Section 1.2
+body text to reflect the actual schema values: `healthy | degraded | unavailable`.
+
+---
+
+### D2 — /tools format template omits `v` prefix on version (spec typo)
+
+**Spec (Section 1.2 format template):**
+```
+`{tool_name}` {version} — {status_label}
+```
+This template shows `{version}` without a `v` prefix.
+
+**Implementation (`_format_tool_entry`):**
+```python
+f"`{tool_name}` v{version} — {status}"
+```
+The implementation prepends `v` to the stored version value.
+
+**Context:** The version field is stored as a bare semver string (e.g., `"1.0.0"`
+per the seed data). The Section 1.2 example shows `` `web_search` v1.0 — enabled ``,
+and the confirmation prompt templates in Sections 2.5, 3.5, and 3.6 all write
+`v{version}` explicitly. The implementation is consistent with the examples and
+with the confirmation prompts.
+
+**Effect:** The implementation produces the correct output. The Section 1.2
+format template is a typo — it should read `` `{tool_name}` v{version} — {status_label} ``.
+
+**Required fix in next version:** Update Section 1.2 format template to include
+the `v` prefix: `` `{tool_name}` v{version} — {status_label} ``.
+
+---
+
+### D3 — /help description for /tools omits "and their status"
+
+**Spec (Section 6):** The specified /help entry for `/tools` is:
+`/tools — List all registered tools and their status`
+
+**Implementation (`handle_help`):**
+```
+/tools — list all registered tools
+```
+The phrase "and their status" is absent. The capitalisation also differs
+("List" vs "list"), though the lowercase style is consistent with all other
+/help entries in the implementation.
+
+**Effect:** Minor — the /help description is functional but incomplete relative
+to the spec. Status information is in fact shown by `/tools`; the help text
+understates what the command does.
+
+**Required fix in next version:** Either update Section 6 to match the
+implementation's style convention (lowercase, concise) or specify the full
+phrase as canonical and require the implementation to match.

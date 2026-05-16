@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-134
+Last decision ID: D-138
 Last updated: 2026-05-16
 
 | ID | Title | Status | Date | Blocks | File |
@@ -143,3 +143,7 @@ Last updated: 2026-05-16
 | D-132 | CLIVE v0.7 Block 9 acceptance criteria — seven criteria | Accepted | 2026-05-16 | Block 9, Block 13, Block 23, Block 28 | [D-132-v07-block9-acceptance-criteria.md](docs/decisions/D-132-v07-block9-acceptance-criteria.md) |
 | D-133 | CLIVE v0.7 Block 9 signed off — all seven criteria met 16 May 2026 | Accepted | 2026-05-16 | Block 9, Block 13, Block 23, Block 16, Block 27, Block 28 | [D-133-v07-block9-signed-off.md](docs/decisions/D-133-v07-block9-signed-off.md) |
 | D-134 | Event bus observability — JSON logging + event_dispatched log + Grafana dashboard | Accepted | 2026-05-16 | Block 13, Block 25, Block 28 | [D-134-event-bus-observability.md](docs/decisions/D-134-event-bus-observability.md) |
+| D-135 | Block 26 (Physical Device/Edge Node) gated out of v1 scope | Accepted | 2026-05-16 | Block 26, Block 2, Block 5 | [D-135-block26-physical-device-gated-out-of-v1.md](docs/decisions/D-135-block26-physical-device-gated-out-of-v1.md) |
+| D-136 | v0.11 second surface is a lightweight web dashboard | Accepted | 2026-05-16 | Block 2, Block 3, Block 4, Block 5 | [D-136-v011-second-surface-web-dashboard.md](docs/decisions/D-136-v011-second-surface-web-dashboard.md) |
+| D-137 | CLIVE v0.8 scope — Block 17 Tool Registry primary, Block 19 first capability, Block 3 partial | Accepted | 2026-05-16 | Block 17, Block 19, Block 3, Block 8, Block 13, Block 23, Block 28 | [D-137-v08-scope.md](docs/decisions/D-137-v08-scope.md) |
+| D-138 | CLIVE v0.8 acceptance criteria — six criteria for Block 17 complete delivery | Accepted | 2026-05-16 | Block 17, Block 8, Block 13, Block 23, Block 28 | [D-138-v08-acceptance-criteria.md](docs/decisions/D-138-v08-acceptance-criteria.md) |

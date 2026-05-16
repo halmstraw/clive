@@ -8,6 +8,7 @@ D-028: backpressure — reject at source when queue full, notify owner.
 D-037: alignment check before every dispatch.
 
 v0.5: clive_events_published_total counter incremented per published event (D-122).
+v0.8: event_dispatched log emitted on every routed event for Loki observability (D-131).
 """
 
 from __future__ import annotations
@@ -115,10 +116,23 @@ class EventBus:
     async def _dispatch(self, event: CLIVEEvent) -> None:
         """Dispatch event to all registered subscribers with retry.
 
+        Emits a structured event_dispatched log on every routed event — this is
+        the primary signal consumed by the Grafana event bus dashboard (D-131).
+
         Uses RETRY_FAILED sentinel to distinguish exhausted-retries from
         void-success (push functions return None on success, which must not
         be treated as failure).
         """
+        # D-131: structured log for Loki / Grafana event bus observability.
+        log.info(
+            "event_dispatched",
+            event_type=event.event_type,
+            source_block=event.source_block,
+            conversation_id=str(event.conversation_id) if event.conversation_id else None,
+            event_id=str(event.event_id),
+            payload_keys=list(event.payload.keys()),
+        )
+
         subscribers = self._subscribers.get(event.event_type, [])
 
         for block_id, handler in subscribers:

@@ -7,15 +7,33 @@ Runs until interrupted.
 v0.3: Block 9 (Action Layer) added — wires action event lifecycle.
 v0.6: cost.cap_exceeded subscriber added (D-125, Block 20).
 v0.7: action.confirmed dispatcher routes by action_type; reminder polling added.
+v0.8: structlog configured for JSON output — enables Loki field extraction (D-131).
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import signal
 
 import structlog
 from dotenv import load_dotenv
+
+# Configure structlog for JSON output before any loggers are created.
+# JSON format enables Loki's | json parser, which powers the event bus
+# Grafana dashboard (D-131). All orchestrator log lines will be JSON.
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
 from . import action, audit, reminder_handler, retrieval, search_handler
 from .bus import bus

@@ -124,10 +124,18 @@
     group: clive
     mode: "0644"
 
-- name: Copy Grafana dashboards
+- name: Copy Grafana dashboard — system overview
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../observability/grafana/dashboards/system_overview.json"
     dest: /home/clive/compose/observability/grafana/dashboards/system_overview.json
+    owner: clive
+    group: clive
+    mode: "0644"
+
+- name: Copy Grafana dashboard — event bus (D-131)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/grafana/dashboards/event_bus.json"
+    dest: /home/clive/compose/observability/grafana/dashboards/event_bus.json
     owner: clive
     group: clive
     mode: "0644"

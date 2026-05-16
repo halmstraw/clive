@@ -195,6 +195,8 @@ jobs:
             /home/clive/compose/observability/grafana/provisioning/alerting/
           cp infrastructure/observability/grafana/dashboards/system_overview.json \
             /home/clive/compose/observability/grafana/dashboards/
+          cp infrastructure/observability/grafana/dashboards/event_bus.json \
+            /home/clive/compose/observability/grafana/dashboards/
           cp infrastructure/observability/caddy/Caddyfile \
             /home/clive/compose/observability/caddy/
 

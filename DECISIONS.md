@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-133
+Last decision ID: D-134
 Last updated: 2026-05-16
 
 | ID | Title | Status | Date | Blocks | File |
@@ -142,3 +142,4 @@ Last updated: 2026-05-16
 | D-131 | CLIVE v0.7 Block 9 scope — web search and reminder actions | Accepted | 2026-05-16 | Block 9, Block 13, Block 23, Block 16, Block 27, Block 28 | [D-131-v07-block9-scope.md](docs/decisions/D-131-v07-block9-scope.md) |
 | D-132 | CLIVE v0.7 Block 9 acceptance criteria — seven criteria | Accepted | 2026-05-16 | Block 9, Block 13, Block 23, Block 28 | [D-132-v07-block9-acceptance-criteria.md](docs/decisions/D-132-v07-block9-acceptance-criteria.md) |
 | D-133 | CLIVE v0.7 Block 9 signed off — all seven criteria met 16 May 2026 | Accepted | 2026-05-16 | Block 9, Block 13, Block 23, Block 16, Block 27, Block 28 | [D-133-v07-block9-signed-off.md](docs/decisions/D-133-v07-block9-signed-off.md) |
+| D-134 | Event bus observability — JSON logging + event_dispatched log + Grafana dashboard | Accepted | 2026-05-16 | Block 13, Block 25, Block 28 | [D-134-event-bus-observability.md](docs/decisions/D-134-event-bus-observability.md) |

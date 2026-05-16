@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS clive_state.pending_actions (
     action_description  text        NOT NULL,          -- human-readable, shown to owner
     conversation_id     uuid,
     chat_id             bigint      NOT NULL,           -- surface routing back to owner
-    status              text        NOT NULL DEFAULT 'pending'
+    status              text        NOT NULL DEFAULT 'pending' -- NOSONAR — 'pending' intentionally appears in default, CHECK, and partial-index predicates
                             CHECK (status IN ('pending', 'confirmed', 'rejected', 'timed_out')),
     created_at          timestamptz NOT NULL DEFAULT now(),
     expires_at          timestamptz NOT NULL,           -- timeout boundary

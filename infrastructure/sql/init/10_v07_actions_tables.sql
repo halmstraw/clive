@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS clive_state.scheduled_reminders (
     message          text        NOT NULL,
     fire_at          timestamptz NOT NULL,
     conversation_id  uuid,
-    status           text        NOT NULL DEFAULT 'pending'
+    status           text        NOT NULL DEFAULT 'pending' -- NOSONAR — 'pending' intentionally appears in default, CHECK, and partial-index predicate
                                  CHECK (status IN ('pending', 'fired', 'cancelled')),
     created_at       timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (reminder_id)

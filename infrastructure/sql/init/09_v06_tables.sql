@@ -14,8 +14,7 @@ CREATE TABLE IF NOT EXISTS clive_state.llm_usage (
     PRIMARY KEY (id)
 );
 
--- Index on created_at for efficient daily spend sum query:
--- SELECT SUM(cost_usd) FROM clive_state.llm_usage WHERE created_at >= CURRENT_DATE
+-- Index on created_at for efficient daily spend sum query
 CREATE INDEX IF NOT EXISTS idx_llm_usage_created_at
     ON clive_state.llm_usage (created_at);
 

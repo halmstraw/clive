@@ -22,7 +22,7 @@
     src: "{{ playbook_dir }}/../sql/init/{{ item }}"
     dest: "/tmp/clive-sql/"
     owner: clive
-    mode: "0644"
+    mode: "0644" # NOSONAR — world-read required: postgres container (uid 999) reads init scripts via bind mount
   loop:
     - 01_extensions.sql
     - 02_schemas.sql

@@ -53,7 +53,7 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
     api_key = os.environ.get("SEARCH_API_KEY", "")
     if not api_key:
         log.error("search_handler_no_api_key")
-        await _push_error(chat_id, "Search not available: SEARCH_API_KEY not configured.")
+        await _push_error(chat_id, "Search not available: `SEARCH_API_KEY` not configured.")
         return
 
     provider = os.environ.get("SEARCH_API_PROVIDER", "brave").lower()

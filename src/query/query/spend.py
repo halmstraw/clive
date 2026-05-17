@@ -4,10 +4,14 @@ Responsibilities:
   - Model pricing dict: known per-token USD prices. Unknown models → 0.0 + warning.
   - get_today_spend_usd(): daily spend sum from clive_state.llm_usage.
   - record_usage(): insert one row after a successful LLM call.
-  - get_daily_cap(): read DAILY_SPEND_CAP_USD env var (None if unset = no cap).
+  - get_daily_cap(): read config table first, fall back to DAILY_SPEND_CAP_USD env var.
   - compute_cost(): prompt_tokens * prompt_price + completion_tokens * completion_price.
 
 Keys in MODEL_PRICING match the CLIVE_LLM_MODEL env var format (provider/model).
+
+v0.12: get_daily_cap() is now async. It reads clive_state.config for key
+  daily_spend_cap_usd before falling back to the env var (D-149).
+  Config table is the owner-managed source of truth; env var is bootstrap-only.
 """
 
 from __future__ import annotations
@@ -50,8 +54,41 @@ def compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> floa
     return round(prompt_tokens * prompt_price + completion_tokens * completion_price, 8)
 
 
-def get_daily_cap() -> float | None:
-    """Return DAILY_SPEND_CAP_USD as float, or None if unset/empty (no cap)."""
+async def get_daily_cap_from_config() -> float | None:
+    """Query clive_state.config for daily_spend_cap_usd.
+
+    Returns the float value if present and parseable, or None on any error
+    (missing key, unparseable value, DB failure). Non-fatal throughout —
+    callers fall back to the env var on None.
+    """
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT config_value FROM clive_state.config WHERE config_key = 'daily_spend_cap_usd'"
+            )
+        if row is None:
+            return None
+        return float(row["config_value"])
+    except (TypeError, ValueError) as exc:
+        log.warning("invalid_config_daily_spend_cap", error=str(exc))
+        return None
+    except Exception as exc:
+        log.warning("config_read_failed_spend_cap_fallback", error=str(exc))
+        return None
+
+
+async def get_daily_cap() -> float | None:
+    """Return the active daily spend cap as float, or None (no cap).
+
+    Reads clive_state.config first (owner-configured, D-149).
+    Falls back to DAILY_SPEND_CAP_USD env var (bootstrap-only).
+    Returns None if neither is set or parseable.
+    """
+    config_cap = await get_daily_cap_from_config()
+    if config_cap is not None:
+        return config_cap
+
     val = os.environ.get("DAILY_SPEND_CAP_USD", "").strip()
     if not val:
         return None

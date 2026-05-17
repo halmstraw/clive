@@ -52,26 +52,49 @@ def test_compute_cost_zero_tokens():
 # get_daily_cap
 # ---------------------------------------------------------------------------
 
-def test_get_daily_cap_set():
-    with patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "10.50"}):
-        assert get_daily_cap() == pytest.approx(10.50)
+@pytest.mark.asyncio
+async def test_get_daily_cap_set():
+    with (
+        patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "10.50"}),
+        patch("query.spend.get_daily_cap_from_config", AsyncMock(return_value=None)),
+    ):
+        assert await get_daily_cap() == pytest.approx(10.50)
 
 
-def test_get_daily_cap_unset():
-    with patch.dict("os.environ", {}, clear=False):
-        import os
-        os.environ.pop("DAILY_SPEND_CAP_USD", None)
-        assert get_daily_cap() is None
+@pytest.mark.asyncio
+async def test_get_daily_cap_unset():
+    import os
+    os.environ.pop("DAILY_SPEND_CAP_USD", None)
+    with patch("query.spend.get_daily_cap_from_config", AsyncMock(return_value=None)):
+        assert await get_daily_cap() is None
 
 
-def test_get_daily_cap_empty_string():
-    with patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": ""}):
-        assert get_daily_cap() is None
+@pytest.mark.asyncio
+async def test_get_daily_cap_empty_string():
+    with (
+        patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": ""}),
+        patch("query.spend.get_daily_cap_from_config", AsyncMock(return_value=None)),
+    ):
+        assert await get_daily_cap() is None
 
 
-def test_get_daily_cap_invalid_value():
-    with patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "not-a-number"}):
-        assert get_daily_cap() is None
+@pytest.mark.asyncio
+async def test_get_daily_cap_invalid_value():
+    with (
+        patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "not-a-number"}),
+        patch("query.spend.get_daily_cap_from_config", AsyncMock(return_value=None)),
+    ):
+        assert await get_daily_cap() is None
+
+
+@pytest.mark.asyncio
+async def test_get_daily_cap_prefers_config_over_env():
+    """Config table value takes precedence over env var (D-149)."""
+    with (
+        patch.dict("os.environ", {"DAILY_SPEND_CAP_USD": "10.00"}),
+        patch("query.spend.get_daily_cap_from_config", AsyncMock(return_value=5.0)),
+    ):
+        assert await get_daily_cap() == pytest.approx(5.0)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,8 @@ v0.8: Tool registry gate added — action.pending validated against Block 17 reg
 v0.9: Block 10 worker scheduler added — cron-based workers via scheduler_loop (D-140).
 v0.9: knowledge_maintenance worker — action.confirmed with action_type='knowledge.prune'
       routed to knowledge_maintenance.handle_prune_confirmed (D-006, D-140).
+v0.12: config_handler added — action.confirmed with action_type='config.set_spend_cap'
+       or 'worker.reschedule' routed to config_handler (D-149, D-006).
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-from . import action, audit, registry, reminder_handler, retrieval, scheduler, search_handler
+from . import action, audit, config_handler, registry, reminder_handler, retrieval, scheduler, search_handler
 from .bus import bus
 from .events.schema import CLIVEEvent
 from .events.taxonomy import (
@@ -87,10 +89,12 @@ log = structlog.get_logger()
 async def dispatch_action_confirmed(event: CLIVEEvent) -> None:
     """Route action.confirmed to the correct handler based on action_type (v0.7).
 
-    document.delete   → Block 15 deletion handler (unchanged from v0.3)
-    web.search        → search_handler.handle_confirmed
-    reminder.schedule → reminder_handler.handle_confirmed
-    knowledge.prune   → knowledge_maintenance.handle_prune_confirmed (v0.9)
+    document.delete      → Block 15 deletion handler (unchanged from v0.3)
+    web.search           → search_handler.handle_confirmed
+    reminder.schedule    → reminder_handler.handle_confirmed
+    knowledge.prune      → knowledge_maintenance.handle_prune_confirmed (v0.9)
+    config.set_spend_cap → config_handler.handle_config_set_spend_cap (v0.12)
+    worker.reschedule    → config_handler.handle_worker_reschedule (v0.12)
     """
     action_type = event.payload.get("action_type", "")
     if action_type == "document.delete":
@@ -101,6 +105,10 @@ async def dispatch_action_confirmed(event: CLIVEEvent) -> None:
         await reminder_handler.handle_confirmed(event)
     elif action_type == "knowledge.prune":
         await knowledge_maintenance.handle_prune_confirmed(event)
+    elif action_type == "config.set_spend_cap":
+        await config_handler.handle_config_set_spend_cap(event)
+    elif action_type == "worker.reschedule":
+        await config_handler.handle_worker_reschedule(event)
     else:
         log.warning("unhandled_action_type_on_confirmed", action_type=action_type)
 
@@ -115,6 +123,7 @@ async def main() -> None:
     await reminder_handler.init_pool()  # Block 9 — Reminder handler (v0.7)
     await scheduler.init_pool()       # Block 10 — Worker scheduler (v0.9)
     await knowledge_maintenance.init_pool()  # Block 10 — Knowledge maintenance (v0.9)
+    await config_handler.init_pool()         # Block 19 — Conversational config (v0.12)
 
     # v0.8: bind registry gate to action pool — no new pool created (D-137).
     registry.set_pool(action._pool)

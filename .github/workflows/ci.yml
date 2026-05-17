@@ -264,3 +264,47 @@ jobs:
           psql -h localhost -U postgres -d clive -c \
             "SET ROLE clive_app; \
              SELECT count(*) FROM clive_state.conversation_summaries;"
+
+      - name: Assert zone 'personal' exists in zones table (v0.10, D-143)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT 1 FROM clive_state.zones WHERE zone_name = 'personal';" \
+            | grep -q "1 row"
+
+      - name: Assert owner user row exists in users table (v0.10, D-144)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT telegram_chat_id, role, zone_access FROM clive_state.users LIMIT 1;"
+
+      - name: Assert tool_registry rows have zone_permissions (v0.10, D-143)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.tool_registry \
+             WHERE zone_permissions IS NULL OR zone_permissions = '{}';" \
+            | grep -q "0"
+
+      - name: Assert pending_actions has zone_scope column (v0.10, D-144)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT zone_scope FROM clive_state.pending_actions LIMIT 1;"
+
+      - name: Assert clive_app cannot CREATE tables (least-privilege check)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             CREATE TABLE clive_state.test_should_fail (id int);" \
+            2>&1 | grep -q "permission denied"

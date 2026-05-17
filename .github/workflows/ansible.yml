@@ -6,10 +6,16 @@ name: Ansible
 #   - After changes to any Ansible role or config file
 #   - After a VM rebuild (see docs/runbooks/terraform-bootstrap.md)
 #
-# For first-time VM provisioning (no runner yet), run Ansible locally:
-#   ansible-playbook -i infrastructure/ansible/inventory \
-#     --extra-vars "@/tmp/clive_vars.json" \
-#     infrastructure/ansible/playbook.yml
+# PREREQUISITE — one-time SSH step before first run:
+#   The self-hosted runner runs as the 'clive' user. The Ansible playbook
+#   uses 'become: true' to escalate to root for system tasks (apt, ufw, etc.).
+#   'clive' must have passwordless sudo before this workflow will succeed.
+#
+#   SSH to the VM as root and run once:
+#     echo "clive ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/clive-ansible
+#     chmod 440 /etc/sudoers.d/clive-ansible
+#
+#   After that this workflow handles all future Ansible runs from GitHub.
 #
 # vars are sourced entirely from GitHub Secrets — no vault.yml required.
 
@@ -37,36 +43,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ansible and required collections
+      - name: Verify sudo access
+        # 'become: true' tasks in the playbook require passwordless sudo.
+        # If this step fails, SSH to the VM as root and run:
+        #   echo "clive ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/clive-ansible
+        #   chmod 440 /etc/sudoers.d/clive-ansible
         run: |
-          pip install ansible
+          if ! sudo -n true 2>/dev/null; then
+            echo "::error::The 'clive' user does not have passwordless sudo."
+            echo ""
+            echo "One-time fix — SSH to the VM as root and run:"
+            echo "  echo 'clive ALL=(ALL) NOPASSWD: ALL' | tee /etc/sudoers.d/clive-ansible"
+            echo "  chmod 440 /etc/sudoers.d/clive-ansible"
+            echo ""
+            echo "Then re-run this workflow."
+            exit 1
+          fi
+          echo "Sudo access confirmed."
+
+      - name: Install Ansible and required collections
+        # pip is not in PATH on the self-hosted runner — use python3 -m pip.
+        # --user installs to ~/.local/bin without requiring sudo.
+        # GITHUB_PATH makes ~/.local/bin available to subsequent steps.
+        run: |
+          python3 -m ensurepip --user 2>/dev/null || true
+          python3 -m pip install --user --quiet ansible
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
 
       - name: Generate vars file from GitHub Secrets
         # Uses Python to build a JSON file — handles all quoting edge cases.
         # File is mode 0600 (owner-only) and deleted in the always() cleanup step.
         env:
-          TELEGRAM_BOT_TOKEN:           ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_OWNER_CHAT_ID:       ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
-          ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY:               ${{ secrets.OPENAI_API_KEY }}
-          POSTGRES_PASSWORD:            ${{ secrets.POSTGRES_PASSWORD }}
-          APP_DB_PASSWORD:              ${{ secrets.APP_DB_PASSWORD }}
-          AUDIT_WRITER_PASSWORD:        ${{ secrets.AUDIT_WRITER_PASSWORD }}
-          MINIO_ROOT_USER:              ${{ secrets.MINIO_ROOT_USER }}
-          MINIO_ROOT_PASSWORD:          ${{ secrets.MINIO_ROOT_PASSWORD }}
-          SEARCH_API_KEY:               ${{ secrets.SEARCH_API_KEY }}
-          DASHBOARD_SECRET:             ${{ secrets.DASHBOARD_SECRET }}
+          TELEGRAM_BOT_TOKEN:            ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_CHAT_ID:        ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          ANTHROPIC_API_KEY:             ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY:                ${{ secrets.OPENAI_API_KEY }}
+          POSTGRES_PASSWORD:             ${{ secrets.POSTGRES_PASSWORD }}
+          APP_DB_PASSWORD:               ${{ secrets.APP_DB_PASSWORD }}
+          AUDIT_WRITER_PASSWORD:         ${{ secrets.AUDIT_WRITER_PASSWORD }}
+          MINIO_ROOT_USER:               ${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD:           ${{ secrets.MINIO_ROOT_PASSWORD }}
+          SEARCH_API_KEY:                ${{ secrets.SEARCH_API_KEY }}
+          DASHBOARD_SECRET:              ${{ secrets.DASHBOARD_SECRET }}
           GRAFANA_CLOUD_PROMETHEUS_URL:  ${{ secrets.GRAFANA_CLOUD_PROMETHEUS_URL }}
           GRAFANA_CLOUD_PROMETHEUS_USER: ${{ secrets.GRAFANA_CLOUD_PROMETHEUS_USER }}
           GRAFANA_CLOUD_LOKI_URL:        ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
           GRAFANA_CLOUD_LOKI_USER:       ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
           GRAFANA_CLOUD_API_KEY:         ${{ secrets.GRAFANA_CLOUD_API_KEY }}
-          BACKUP_S3_ENDPOINT:           ${{ secrets.BACKUP_S3_ENDPOINT }}
-          BACKUP_S3_ACCESS_KEY:         ${{ secrets.BACKUP_S3_ACCESS_KEY }}
-          BACKUP_S3_SECRET_KEY:         ${{ secrets.BACKUP_S3_SECRET_KEY }}
-          OWNER_IP:                     ${{ secrets.OWNER_IP }}
-          RUNNER_TOKEN:                 ${{ inputs.runner_token }}
+          BACKUP_S3_ENDPOINT:            ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_ACCESS_KEY:          ${{ secrets.BACKUP_S3_ACCESS_KEY }}
+          BACKUP_S3_SECRET_KEY:          ${{ secrets.BACKUP_S3_SECRET_KEY }}
+          OWNER_IP:                      ${{ secrets.OWNER_IP }}
+          RUNNER_TOKEN:                  ${{ inputs.runner_token }}
         run: |
           python3 - << 'EOF'
           import os, json, stat

@@ -1,0 +1,6 @@
+# CI inventory — used by .github/workflows/ansible.yml
+# The self-hosted runner (D-090) runs on the VM as the 'clive' user.
+# ansible_connection=local means Ansible manages the machine it is running on —
+# no SSH key or inbound network connection required.
+[clive]
+localhost ansible_connection=local

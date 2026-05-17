@@ -1,54 +1,69 @@
 ---
-# Ansible Vault — required variables
+# Ansible variables — GitHub Secrets reference
 #
-# This file documents the structure of vault.yml.
-# vault.yml is encrypted with ansible-vault and must never be committed in plaintext.
+# vault.yml has been removed. All Ansible variables are now sourced from
+# GitHub Secrets by .github/workflows/ansible.yml at run time.
 #
-# To create: ansible-vault create infrastructure/ansible/vault.yml
-# To edit:   ansible-vault edit   infrastructure/ansible/vault.yml
-# To run:    ansible-playbook -i infrastructure/ansible/inventory \
-#              infrastructure/ansible/playbook.yml \
-#              --vault-password-file /tmp/vault_pass
+# This file documents every variable the playbook requires and which
+# GitHub Secret it maps to. Use it as a checklist when:
+#   - Setting up a new environment
+#   - Auditing what is stored in GitHub Secrets
+#   - Running Ansible locally (first-time VM provisioning before runner exists)
 #
-# All values are sourced from the same named secrets in GitHub Actions
-# (Settings → Secrets and variables → Actions) so that Ansible and CI/CD
-# are always in sync.
+# For local runs, create a vars file manually:
+#   cp infrastructure/ansible/vault.example.yml /tmp/clive_vars.yml
+#   # fill in real values, then:
+#   ansible-playbook -i infrastructure/ansible/inventory \
+#     --extra-vars "@/tmp/clive_vars.yml" \
+#     infrastructure/ansible/playbook.yml
+#   rm /tmp/clive_vars.yml
+#
+# NEVER commit a populated copy of this file.
 
-# ---- Telegram ---------------------------------------------------------------
-telegram_bot_token: ""
-telegram_owner_chat_id: ""
+# ---- GitHub Secret name ---- | ---- Ansible variable name ----
 
-# ---- LLM providers ----------------------------------------------------------
-anthropic_api_key: ""
-openai_api_key: ""                # Used by Block 15 (text-embedding-3-small, D-096)
+# Telegram
+# TELEGRAM_BOT_TOKEN            → telegram_bot_token
+# TELEGRAM_OWNER_CHAT_ID        → telegram_owner_chat_id
 
-# ---- PostgreSQL -------------------------------------------------------------
-postgres_password: ""             # postgres superuser — init only, not a runtime credential
-app_db_password: ""               # clive_app role (D-093)
-audit_writer_password: ""         # clive_audit_writer role (D-067, D-093)
+# LLM providers
+# ANTHROPIC_API_KEY             → anthropic_api_key
+# OPENAI_API_KEY                → openai_api_key  (Block 15 embedding, D-096)
 
-# ---- MinIO ------------------------------------------------------------------
-minio_root_user: ""
-minio_root_password: ""
+# PostgreSQL
+# POSTGRES_PASSWORD             → postgres_password       (superuser — init only)
+# APP_DB_PASSWORD               → app_db_password         (clive_app role, D-093)
+# AUDIT_WRITER_PASSWORD         → audit_writer_password   (clive_audit_writer, D-067)
 
-# ---- MinIO backup (Hetzner Object Storage, D-089) ---------------------------
-hetzner_backup_access_key: ""
-hetzner_backup_secret_key: ""
+# MinIO
+# MINIO_ROOT_USER               → minio_root_user
+# MINIO_ROOT_PASSWORD           → minio_root_password
 
-# ---- Block 9 — web search (D-131) ------------------------------------------
-search_api_key: ""                # Brave Search or SerpAPI key (D-133)
+# MinIO backup — Hetzner Object Storage (D-089)
+# BACKUP_S3_ENDPOINT            → backup_s3_endpoint
+# BACKUP_S3_ACCESS_KEY          → backup_s3_access_key
+# BACKUP_S3_SECRET_KEY          → backup_s3_secret_key
 
-# ---- Block 2 — web dashboard (D-146) ----------------------------------------
-dashboard_secret: ""              # Strong random string; used for session auth
+# Block 9 — web search (D-131)
+# SEARCH_API_KEY                → search_api_key
 
-# ---- Block 25 — Grafana Cloud (D-117 superseded 2026-05-17) -----------------
+# Block 2 — web dashboard session auth (D-146)
+# DASHBOARD_SECRET              → dashboard_secret
+
+# Block 25 — Grafana Cloud (D-117 superseded 2026-05-17)
 # Obtain from: Grafana Cloud → Home → Administration → Stack → "Sending data"
 # API key must have MetricsPublisher + LogsPublisher scopes.
-grafana_cloud_prometheus_url: ""  # https://prometheus-prod-XX.grafana.net/api/prom/push
-grafana_cloud_prometheus_user: "" # Numeric user ID shown on the stack page
-grafana_cloud_loki_url: ""        # https://logs-prod-XX.grafana.net/loki/api/v1/push
-grafana_cloud_loki_user: ""       # Numeric user ID shown on the stack page
-grafana_cloud_api_key: ""         # API token value
+# GRAFANA_CLOUD_PROMETHEUS_URL  → grafana_cloud_prometheus_url
+# GRAFANA_CLOUD_PROMETHEUS_USER → grafana_cloud_prometheus_user
+# GRAFANA_CLOUD_LOKI_URL        → grafana_cloud_loki_url
+# GRAFANA_CLOUD_LOKI_USER       → grafana_cloud_loki_user
+# GRAFANA_CLOUD_API_KEY         → grafana_cloud_api_key
 
-# ---- CI/CD — GitHub Actions runner (D-090) ----------------------------------
-github_runner_token: ""           # From: repo Settings → Actions → Runners → New self-hosted runner
+# Networking
+# OWNER_IP                      → owner_ip  (UFW SSH allow-list, base role)
+
+# GitHub Actions runner (D-090)
+# Passed as workflow_dispatch input 'runner_token' — not a long-lived secret.
+# Only required when registering/re-registering the runner.
+# Obtain from: repo Settings → Actions → Runners → New self-hosted runner.
+# runner_token (workflow input)  → runner_token

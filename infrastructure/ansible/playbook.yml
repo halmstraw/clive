@@ -2,8 +2,10 @@
 - name: Configure CLIVE production server
   hosts: clive
   become: true
-  vars_files:
-    - vault.yml  # ansible-vault encrypted; contains secrets — never committed unencrypted
+  # vars are passed via --extra-vars "@/tmp/clive_vars.json" sourced from GitHub Secrets.
+  # For the GitHub Actions workflow see .github/workflows/ansible.yml.
+  # For local / first-time runs see infrastructure/ansible/vault.example.yml
+  # for the full list of required variables.
 
   roles:
     - base

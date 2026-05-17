@@ -30,14 +30,12 @@ jobs:
         working-directory: infrastructure/terraform
 
       - name: Ansible lint
-        env:
-          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        # No vault password needed — vault.yml removed; vars sourced from GitHub Secrets
+        # via .github/workflows/ansible.yml. Lint checks structure only.
         run: |
           pip install ansible-lint
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
-          echo "$ANSIBLE_VAULT_PASSWORD" > /tmp/vault_pass
-          ANSIBLE_VAULT_PASSWORD_FILE=/tmp/vault_pass ansible-lint infrastructure/ansible/playbook.yml
-          rm -f /tmp/vault_pass
+          ansible-lint infrastructure/ansible/playbook.yml
 
       - name: Create stub secrets file for Compose validation (D-084)
         run: |

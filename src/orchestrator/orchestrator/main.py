@@ -10,6 +10,7 @@ v0.7: action.confirmed dispatcher routes by action_type; reminder polling added.
 v0.8: structlog configured for JSON output — enables Loki field extraction (D-131).
 v0.8: Tool registry gate added — action.pending validated against Block 17 registry
       before dispatch to Block 9 (D-137). Admin tool enable/disable handlers wired.
+v0.9: Block 10 worker scheduler added — cron-based workers via scheduler_loop (D-140).
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-from . import action, audit, registry, reminder_handler, retrieval, search_handler
+from . import action, audit, registry, reminder_handler, retrieval, scheduler, search_handler
 from .bus import bus
 from .events.schema import CLIVEEvent
 from .events.taxonomy import (
@@ -106,6 +107,7 @@ async def main() -> None:
     await retrieval.init_pool()
     await action.init_pool()          # Block 9 — Action Layer (v0.3)
     await reminder_handler.init_pool()  # Block 9 — Reminder handler (v0.7)
+    await scheduler.init_pool()       # Block 10 — Worker scheduler (v0.9)
 
     # v0.8: bind registry gate to action pool — no new pool created (D-137).
     registry.set_pool(action._pool)
@@ -156,6 +158,7 @@ async def main() -> None:
     # Background tasks
     timeout_task = asyncio.create_task(action.timeout_checker(bus))
     reminder_task = asyncio.create_task(reminder_handler.reminder_poll())  # v0.7
+    scheduler_task = asyncio.create_task(scheduler.scheduler_loop())        # v0.9
 
     log.info("orchestrator_ready")
 
@@ -169,7 +172,8 @@ async def main() -> None:
     log.info("orchestrator_shutting_down")
     timeout_task.cancel()
     reminder_task.cancel()
-    await asyncio.gather(timeout_task, reminder_task, return_exceptions=True)
+    scheduler_task.cancel()
+    await asyncio.gather(timeout_task, reminder_task, scheduler_task, return_exceptions=True)
     await runner.cleanup()
 
 

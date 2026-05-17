@@ -18,3 +18,10 @@ audit_writes_total = Counter(
     "clive_audit_writes_total",
     "Total number of audit log writes performed by Block 13",
 )
+
+# Total Block 10 worker runs, labelled by worker and outcome status (v0.9, D-140).
+worker_runs_total = Counter(
+    "clive_worker_runs_total",
+    "Total Block 10 worker runs by worker and outcome status",
+    ["worker_name", "status"],
+)

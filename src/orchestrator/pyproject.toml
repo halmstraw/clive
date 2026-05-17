@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv>=1.0",   # Load /etc/clive/secrets.env
     "httpx>=0.27",          # HTTP client for pushing events to Block 8 and Block 23
     "prometheus-client>=0.20",  # Metrics exposition for Block 25 Phase 2 (D-122)
+    "croniter>=2.0",        # Cron expression parsing for Block 10 worker scheduler (D-140)
 ]
 
 [project.optional-dependencies]

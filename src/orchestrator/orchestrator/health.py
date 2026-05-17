@@ -6,12 +6,16 @@ v0.4: added /retrieve/document-list (/list command) and /retrieve/status
 v0.5: added /alerts — Grafana webhook receiver; emits alert.triggered events
       on the internal bus per D-003/D-118.
       added /metrics — Prometheus scrape endpoint (D-122 Phase 2).
+v0.11: added /retrieve/conversation-history and /retrieve/pending-actions
+       for Block 2 web dashboard (D-146, D-147 AC-5/AC-6).
+v0.12: added /retrieve/action-history and /retrieve/workers (D-149).
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 
 import structlog
 from aiohttp import web
@@ -21,11 +25,15 @@ from .bus import bus
 from .events.schema import CLIVEEvent
 from .events.taxonomy import ALERT_TRIGGERED
 from .retrieval import (
+    get_conversation_history,
+    get_pending_actions,
     retrieve,
+    retrieve_action_history,
     retrieve_document_by_filename,
     retrieve_document_list,
     retrieve_status,
     retrieve_system_document,
+    retrieve_workers,
 )
 
 log = structlog.get_logger()
@@ -181,6 +189,80 @@ async def handle_retrieve_status(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+# ---------------------------------------------------------------------------
+# v0.11 — Block 2/5 dashboard retrieval endpoints (D-146, D-147 AC-5/AC-6)
+# ---------------------------------------------------------------------------
+
+async def handle_retrieve_conversation_history(request: web.Request) -> web.Response:
+    """Return conversation turns for a given conversation_id.
+
+    D-147 AC-6: used by dashboard /api/history to show shared conversation
+    history. Same conversation_turns table read by Block 8.
+
+    POST /retrieve/conversation-history
+    Body: {"conversation_id": "uuid-string", "limit": N (optional)}
+    Returns: {"turns": [{"role": ..., "content": ...}], "conversation_id": ...}
+    """
+    data = await request.json()
+    raw_id = data.get("conversation_id")
+    if not raw_id:
+        return web.json_response({"error": "conversation_id required"}, status=400)
+
+    try:
+        conversation_id = uuid.UUID(str(raw_id))
+    except ValueError:
+        return web.json_response({"error": "invalid conversation_id"}, status=400)
+
+    limit = int(data.get("limit", 50))
+    turns = await get_conversation_history(conversation_id, limit=limit)
+    return web.json_response({"turns": turns, "conversation_id": str(conversation_id)})
+
+
+async def handle_retrieve_pending_actions(request: web.Request) -> web.Response:
+    """Return pending (unresolved) Block 9 actions for the dashboard.
+
+    D-147 AC-5: used by dashboard /api/pending to list actions awaiting
+    owner confirmation. Only status='pending' and not-yet-expired rows.
+
+    POST /retrieve/pending-actions
+    Body: {"zone_scope": "personal"}
+    Returns: {"actions": [...], "count": N}
+    """
+    data = await request.json()
+    zone_scope = data.get("zone_scope", "personal")
+    actions = await get_pending_actions(zone_scope=zone_scope)
+    return web.json_response({"actions": actions, "count": len(actions)})
+
+
+# ---------------------------------------------------------------------------
+# v0.12 — Self-knowledge retrieval endpoints (D-149)
+# ---------------------------------------------------------------------------
+
+async def handle_retrieve_action_history(request: web.Request) -> web.Response:
+    """Return resolved actions from the last N days.
+
+    POST /retrieve/action-history
+    Body: {"zone_scope": "personal", "days": 7}
+    Returns: {"actions": [...], "total": N, "days": N}
+    """
+    data = await request.json()
+    zone_scope = data.get("zone_scope", "personal")
+    days = int(data.get("days", 7))
+    result = await retrieve_action_history(zone_scope=zone_scope, days=days)
+    return web.json_response(result)
+
+
+async def handle_retrieve_workers(request: web.Request) -> web.Response:
+    """Return registered workers with schedule and health information.
+
+    POST /retrieve/workers
+    Body: {} (no body required)
+    Returns: {"workers": [...], "total": N}
+    """
+    result = await retrieve_workers()
+    return web.json_response(result)
+
+
 async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/health", handle_health)
@@ -192,6 +274,12 @@ async def start_health_server(host: str = "0.0.0.0", port: int = 8080) -> web.Ap
     app.router.add_post("/retrieve/document-by-filename", handle_retrieve_document_by_filename)
     app.router.add_post("/retrieve/document-list", handle_retrieve_document_list)
     app.router.add_post("/retrieve/status", handle_retrieve_status)
+    # v0.11 — Block 2/5 dashboard endpoints (D-146)
+    app.router.add_post("/retrieve/conversation-history", handle_retrieve_conversation_history)
+    app.router.add_post("/retrieve/pending-actions", handle_retrieve_pending_actions)
+    # v0.12 — self-knowledge endpoints (D-149)
+    app.router.add_post("/retrieve/action-history", handle_retrieve_action_history)
+    app.router.add_post("/retrieve/workers", handle_retrieve_workers)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)

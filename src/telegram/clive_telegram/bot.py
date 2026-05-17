@@ -312,6 +312,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "input_text": user_input,
                 "timestamp": update.message.date.isoformat(),
                 "surface_type": "telegram",
+                "source_surface": "telegram",  # D-146: Block 4 egress routing
                 "auth_metadata": make_auth_metadata(chat_id),
             },
         },

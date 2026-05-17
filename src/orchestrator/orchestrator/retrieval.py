@@ -11,6 +11,7 @@ v0.3: retrieve_document_by_filename added for T8 deletion lookup (D-109).
 v0.6: retrieve_status extended with today's LLM spend and daily cap (D-125).
 v0.10: _is_valid_zone added — zone_scope validated against clive_state.zones
        before retrieval (D-143). Fail-open on DB error.
+v0.12: retrieve_action_history and retrieve_workers added (D-149).
 """
 
 from __future__ import annotations
@@ -454,3 +455,161 @@ async def retrieve_status(zone_scope: str) -> dict[str, Any]:
         "llm_spend_today_usd": llm_spend_today_usd,
         "daily_cap_usd": daily_cap_usd,
     }
+
+# ---------------------------------------------------------------------------
+# Block 5 / Block 2 — Dashboard API retrieval (v0.11, D-146)
+# ---------------------------------------------------------------------------
+
+async def get_pending_actions(zone_scope: str) -> list[dict[str, Any]]:
+    """Return pending (unresolved) actions for the dashboard display.
+
+    D-147 AC-5: dashboard /api/pending reads this endpoint via Block 13's
+    /retrieve/pending-actions HTTP route. Only status='pending' rows are
+    returned — expired rows are cleaned up by the timeout_checker background
+    task in action.py.
+
+    Returns list of dicts with action_request_id, action_type, action_target,
+    action_description, conversation_id, expires_at, zone_scope, created_at.
+    """
+    if _pool is None:
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT action_request_id, action_type, action_target,
+                   action_description, conversation_id, expires_at,
+                   zone_scope, created_at
+            FROM clive_state.pending_actions
+            WHERE status = 'pending'
+              AND zone_scope = $1
+              AND expires_at > NOW()
+            ORDER BY created_at DESC
+            """,
+            zone_scope,
+        )
+
+    actions = [
+        {
+            "action_request_id": str(row["action_request_id"]),
+            "action_type": row["action_type"],
+            "action_target": row["action_target"],
+            "action_description": row["action_description"],
+            "conversation_id": str(row["conversation_id"]) if row["conversation_id"] else None,
+            "expires_at": row["expires_at"].isoformat(),
+            "zone_scope": row["zone_scope"],
+            "created_at": row["created_at"].isoformat(),
+        }
+        for row in rows
+    ]
+
+    log.info("pending_actions_retrieved", zone_scope=zone_scope, count=len(actions))
+    return actions
+
+
+# ---------------------------------------------------------------------------
+# v0.12 — Self-knowledge retrieval (D-149)
+# ---------------------------------------------------------------------------
+
+async def retrieve_action_history(
+    zone_scope: str,
+    days: int = 7,
+) -> dict[str, Any]:
+    """Return resolved actions from the last N days for a given zone.
+
+    D-143: unknown zone_scope returns empty result immediately.
+    Queries clive_state.pending_actions ordered newest-first; capped at 50 rows.
+
+    Returns {actions: [...], total: N, days: N}.
+    """
+    if _pool is None:
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    if not await _is_valid_zone(zone_scope):
+        log.warning("retrieval_unknown_zone", zone_scope=zone_scope)
+        return {"actions": [], "total": 0, "days": days}
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT action_request_id, action_type, action_target,
+                   action_description, status, created_at, zone_scope
+            FROM clive_state.pending_actions
+            WHERE zone_scope = $1
+              AND created_at >= NOW() - ($2 || ' days')::INTERVAL
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            zone_scope,
+            str(days),
+        )
+
+    actions = [
+        {
+            "action_request_id": str(row["action_request_id"]),
+            "action_type": row["action_type"],
+            "action_target": row["action_target"],
+            "action_description": row["action_description"],
+            "status": row["status"],
+            "created_at": row["created_at"].isoformat(),
+            "zone_scope": row["zone_scope"],
+        }
+        for row in rows
+    ]
+
+    log.info(
+        "action_history_retrieved",
+        zone_scope=zone_scope,
+        days=days,
+        total=len(actions),
+    )
+    return {"actions": actions, "total": len(actions), "days": days}
+
+
+async def retrieve_workers() -> dict[str, Any]:
+    """Return registered workers with schedule and health information.
+
+    JOINs clive_state.workers (schedule) with clive_state.tool_registry
+    (display_name, description, enabled, health_status).
+
+    Returns {workers: [...], total: N}.
+    """
+    if _pool is None:
+        raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                w.worker_name,
+                t.display_name,
+                t.description,
+                t.enabled,
+                t.health_status,
+                w.schedule_type,
+                w.cron_expression,
+                w.last_run_at,
+                w.next_run_at
+            FROM clive_state.workers w
+            JOIN clive_state.tool_registry t ON t.tool_name = w.worker_name
+            ORDER BY w.worker_name
+            """
+        )
+
+    workers = [
+        {
+            "tool_name": row["worker_name"],
+            "display_name": row["display_name"],
+            "description": row["description"],
+            "enabled": row["enabled"],
+            "health_status": row["health_status"],
+            "schedule_type": row["schedule_type"],
+            "schedule": row["cron_expression"],
+            "last_run_at": row["last_run_at"].isoformat() if row["last_run_at"] else None,
+            "next_run_at": row["next_run_at"].isoformat() if row["next_run_at"] else None,
+        }
+        for row in rows
+    ]
+
+    log.info("workers_retrieved", total=len(workers))
+    return {"workers": workers, "total": len(workers)}

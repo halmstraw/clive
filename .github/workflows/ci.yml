@@ -55,6 +55,7 @@ jobs:
           QUERY_IMAGE_TAG: latest
           TELEGRAM_IMAGE_TAG: latest
           PROCESSING_IMAGE_TAG: latest
+          DASHBOARD_IMAGE_TAG: latest
 
   test:
     name: Test
@@ -130,6 +131,12 @@ jobs:
           pip install -e ".[dev]"
           python -m pytest tests/ -v
         working-directory: src/processing
+
+      - name: Run dashboard service tests (v0.11, D-147)
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -v
+        working-directory: src/dashboard
 
   test-db:
     name: Database role privilege tests
@@ -299,6 +306,40 @@ jobs:
           psql -h localhost -U postgres -d clive -c \
             "SET ROLE clive_app; \
              SELECT zone_scope FROM clive_state.pending_actions LIMIT 1;"
+
+      - name: Assert web_sessions table exists (v0.11, D-146)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.web_sessions;"
+
+      - name: Assert web_sessions has correct columns (v0.11, D-146)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT session_token, user_id, created_at, expires_at, last_seen_at \
+             FROM clive_state.web_sessions LIMIT 1;"
+
+      - name: Assert config table exists (v0.12, D-149)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT count(*) FROM clive_state.config;"
+
+      - name: Assert config table has correct columns (v0.12, D-149)
+        env:
+          PGPASSWORD: testpassword
+        run: |
+          psql -h localhost -U postgres -d clive -c \
+            "SET ROLE clive_app; \
+             SELECT config_key, config_value, updated_at, updated_by \
+             FROM clive_state.config LIMIT 1;"
 
       - name: Assert clive_app cannot CREATE tables (least-privilege check)
         env:

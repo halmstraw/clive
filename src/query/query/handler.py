@@ -42,11 +42,17 @@ v0.9: Block 16 retrieval tracking (D-140).
   - Non-fatal: any DB failure is caught and logged as WARN; query unaffected.
   - Skipped on cache hits (D-046) — only fresh retrievals are tracked.
   - Enables knowledge_maintenance worker (Wave 3-B) to identify stale chunks.
+
+v0.12: Block 29 self-knowledge queries + Block 20 config-aware spend cap (D-149).
+  - Step 2.5: self-knowledge intent detection runs after tool registry fetch.
+    Matched queries short-circuit vector RAG and return live state directly.
+  - get_daily_cap() is now async — reads clive_state.config before env var.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 from typing import Any
@@ -82,6 +88,65 @@ ACTION_VERBS = {
     "remind", "set", "add", "remove", "cancel", "upload",
 }
 
+# Self-knowledge phrase sets — intentionally broad.
+# False positives are acceptable here; the user typing these is almost
+# certainly asking about CLIVE's state, not issuing a regular query.
+_SK_PHRASES: dict[str, list[str]] = {
+    "documents": [
+        "what documents do you know about",
+        "what's in your knowledge base",
+        "what is in your knowledge base",
+        "list your documents",
+        "what have you ingested",
+        "what files do you have",
+        "what documents have you",
+        "show me your documents",
+        "list documents",
+    ],
+    "tools": [
+        "what tools do you have",
+        "what can you do",
+        "what are your capabilities",
+        "what actions are available",
+        "what capabilities do you have",
+        "list your tools",
+        "what tools are available",
+        "show me your tools",
+    ],
+    "actions": [
+        "what actions did you take",
+        "what did you do",
+        "recent actions",
+        "action history",
+        "what have you done this week",
+        "what have you done recently",
+        "show me recent actions",
+        "list recent actions",
+    ],
+    "workers": [
+        "what workers do you have",
+        "what background tasks",
+        "what runs on a schedule",
+        "scheduled tasks",
+        "what workers are running",
+        "list your workers",
+        "what background workers",
+    ],
+    "health": [
+        "how much have you cost",
+        "what's your status",
+        "what is your status",
+        "system health",
+        "how much did you spend",
+        "are you healthy",
+        "what's your daily cap",
+        "what is your daily cap",
+        "how much have you spent",
+        "show me your status",
+        "system status",
+    ],
+}
+
 ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")  # NOSONAR — Docker-internal, no TLS
 _EVENT_QUERY_RESPONSE = "query.response"
 
@@ -115,6 +180,42 @@ def _detect_action_intent(text: str) -> str | None:
         if word in ACTION_VERBS:
             return word
     return None
+
+
+def _detect_self_knowledge_intent(text: str) -> str | None:
+    """Detect if the query is asking about CLIVE's own state or capabilities.
+
+    Returns one of 'documents', 'tools', 'actions', 'workers', 'health',
+    or None if no self-knowledge phrase matches.
+
+    Matching is case-insensitive substring search. Intentionally broad —
+    false positives are better than misses for this intent class.
+    """
+    normalised = text.lower()
+    for intent, phrases in _SK_PHRASES.items():
+        for phrase in phrases:
+            if phrase in normalised:
+                return intent
+    return None
+
+
+# Regex for conversational spend cap detection.
+# Matches "set (my )?(daily )?(spend )?(cap|limit|budget) to $X" or "cap to $X.XX".
+_SPEND_CAP_RE = re.compile(
+    r"set\s+(?:my\s+)?(?:daily\s+)?(?:spend\s+)?(?:cap|limit|budget)\s+to\s+\$?(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
+
+def _detect_spend_cap_intent(text: str) -> str | None:
+    """Return the new cap value as a string if the query sets the daily spend cap.
+
+    Returns the parsed dollar value (e.g. "5.0") or None.
+    Only matches explicit set-cap phrases — self-knowledge phrases like "what's
+    my cap" are handled by the 'health' self-knowledge intent instead.
+    """
+    m = _SPEND_CAP_RE.search(text)
+    return str(float(m.group(1))) if m else None
 
 
 def _find_tool_in_registry(
@@ -202,30 +303,180 @@ async def _update_chunk_retrieval_stats(chunk_ids: list[str]) -> None:
         )
 
 
+async def _handle_self_knowledge_query(
+    intent: str,
+    zone_scope: str,
+    event_id: uuid.UUID,
+    source_surface: str,
+    available_tools: list[ToolDescriptor],
+) -> dict[str, Any]:
+    """Fetch and format a self-knowledge response for the given intent.
+
+    Each intent hits a dedicated orchestrator endpoint that returns live state.
+    All HTTP calls use a 10s timeout. Failures are non-fatal — any exception
+    produces a graceful fallback response rather than propagating to the caller.
+
+    Returns a response_payload dict with the same shape as other early-return
+    paths in handle_query().
+    """
+    _empty_confidence = {
+        "chunks_returned": 0,
+        "highest_relevance_score": 0.0,
+        "threshold_met": False,
+    }
+
+    def _build_payload(text: str) -> dict[str, Any]:
+        return {
+            "event_id": str(event_id),
+            "response_text": text,
+            "confidence": _empty_confidence,
+            "chunk_ids": [],
+            "source_surface": source_surface,
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if intent == "documents":
+                resp = await client.post(
+                    f"{ORCHESTRATOR_URL}/retrieve/document-list",
+                    json={"zone_scope": zone_scope},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                docs = data.get("documents", [])
+                if not docs:
+                    text = "My knowledge base is empty."
+                else:
+                    lines = [f"I have {len(docs)} document(s) in my knowledge base:"]
+                    for i, d in enumerate(docs, 1):
+                        date_part = d.get("ingested_at", "")[:10] if d.get("ingested_at") else ""
+                        chunks_part = f"{d.get('chunk_count', 0)} chunks"
+                        name = d.get("filename", d.get("title", "unknown"))
+                        line = f"{i}. {name} — {chunks_part}"
+                        if date_part:
+                            line += f" ({date_part})"
+                        lines.append(line)
+                    text = "\n".join(lines)
+
+            elif intent == "tools":
+                if not available_tools:
+                    text = "No tools are currently registered."
+                else:
+                    lines = [f"I have {len(available_tools)} tool(s) available:"]
+                    for t in available_tools:
+                        lines.append(f"- {t.display_name}: {t.description}")
+                    text = "\n".join(lines)
+
+            elif intent == "actions":
+                resp = await client.post(
+                    f"{ORCHESTRATOR_URL}/retrieve/action-history",
+                    json={"zone_scope": zone_scope, "days": 7},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                actions = data.get("actions", [])
+                if not actions:
+                    text = "No actions recorded in the last 7 days."
+                else:
+                    lines = [f"In the last 7 days I took {len(actions)} action(s):"]
+                    for a in actions:
+                        date_part = a.get("executed_at", "")[:10] if a.get("executed_at") else ""
+                        status = a.get("status", "unknown")
+                        action_type = a.get("action_type", "unknown")
+                        target = a.get("action_target", "")
+                        line = f"- {action_type}"
+                        if target:
+                            line += f" on {target}"
+                        line += f" — {status}"
+                        if date_part:
+                            line += f" ({date_part})"
+                        lines.append(line)
+                    text = "\n".join(lines)
+
+            elif intent == "workers":
+                resp = await client.post(
+                    f"{ORCHESTRATOR_URL}/retrieve/workers",
+                    json={},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                workers = data.get("workers", [])
+                if not workers:
+                    text = "No workers are registered."
+                else:
+                    lines = [f"I have {len(workers)} background worker(s):"]
+                    for w in workers:
+                        enabled = "yes" if w.get("enabled") else "no"
+                        schedule = w.get("schedule", "unscheduled")
+                        name = w.get("display_name", w.get("worker_name", "unknown"))
+                        description = w.get("description", "")
+                        line = f"- {name}"
+                        if description:
+                            line += f": {description}"
+                        line += f", schedule: {schedule}, enabled: {enabled}"
+                        lines.append(line)
+                    text = "\n".join(lines)
+
+            elif intent == "health":
+                resp = await client.post(
+                    f"{ORCHESTRATOR_URL}/retrieve/status",
+                    json={"zone_scope": zone_scope},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                doc_count = data.get("doc_count", 0)
+                chunk_count = data.get("chunk_count", 0)
+                spend_today = data.get("llm_spend_today_usd", 0.0)
+                cap_raw = data.get("daily_cap_usd")
+                cap_str = f"${cap_raw:.2f}" if cap_raw is not None else "not set"
+                last_query = (data.get("last_query_at") or "")[:10] or "never"
+                last_ingest_file = data.get("last_doc_name", "")
+                last_ingest_date = (data.get("last_doc_at") or "")[:10]
+                last_ingest = f"{last_ingest_file} ({last_ingest_date})" if last_ingest_file else "never"
+                text = (
+                    f"System status:\n"
+                    f"- Documents: {doc_count} ({chunk_count} chunks)\n"
+                    f"- LLM spend today: ${spend_today:.4f}\n"
+                    f"- Daily cap: {cap_str}\n"
+                    f"- Last query: {last_query}\n"
+                    f"- Last ingest: {last_ingest}"
+                )
+
+            else:
+                text = "Could not retrieve that information right now."
+
+    except Exception as exc:
+        log.warning("self_knowledge_query_failed", intent=intent, error=str(exc))
+        text = "Could not retrieve that information right now."
+
+    return _build_payload(text)
+
+
 async def handle_query(event: dict[str, Any]) -> None:
     """Handle a query.received event.
 
     Steps:
-    1.  Idempotency check (D-046)
-    2.  Fetch live tool registry (v0.8, D-137) — TTL-cached, 60s
-    3.  Action intent detection and registry validation (D-045, D-138)
-    4.  Retrieve system documents via orchestrator (D-043, D-048)
-    5.  Retrieve knowledge chunks via orchestrator (D-043)
-    6.  Retrieve conversation history from event payload
-    7.  Spend cap check — return canned response if exceeded (D-125)
-    8.  Semantic memory retrieval (v0.7, D-128, AC-3)
-    9.  Assemble context (D-044) — includes memory entities as Tier 3.5
-    10. Call LLM with live tool list in system prompt (D-077, v0.8 D-137)
-    11. Record LLM usage to clive_state.llm_usage (D-125)
-    12. Build response payload, cache, emit query.response (v0.3: include chunk_ids)
-    13. Record query duration (D-122 Phase 2)
-    14. Retrieval tracking (v0.9, D-140) — non-fatal:
-        Update retrieval_count + last_retrieved_at on returned chunks.
-        Skipped if chunk_ids is empty. Not called on cache hits (D-046).
-    15. Post-response memory operations (v0.7, D-128) — non-fatal:
-        a. Extract entities from the turn (AC-2)
-        b. Store entities with embeddings (AC-2)
-        c. Consolidate old turns if threshold met (AC-5)
+    1.   Idempotency check (D-046)
+    2.   Fetch live tool registry (v0.8, D-137) — TTL-cached, 60s
+    2.5. Self-knowledge detection (v0.12, D-149) — short-circuits RAG
+    3.   Action intent detection and registry validation (D-045, D-138)
+    4.   Retrieve system documents via orchestrator (D-043, D-048)
+    5.   Retrieve knowledge chunks via orchestrator (D-043)
+    6.   Retrieve conversation history from event payload
+    7.   Spend cap check — return canned response if exceeded (D-125)
+    8.   Semantic memory retrieval (v0.7, D-128, AC-3)
+    9.   Assemble context (D-044) — includes memory entities as Tier 3.5
+    10.  Call LLM with live tool list in system prompt (D-077, v0.8 D-137)
+    11.  Record LLM usage to clive_state.llm_usage (D-125)
+    12.  Build response payload, cache, emit query.response (v0.3: include chunk_ids)
+    13.  Record query duration (D-122 Phase 2)
+    14.  Retrieval tracking (v0.9, D-140) — non-fatal:
+         Update retrieval_count + last_retrieved_at on returned chunks.
+         Skipped if chunk_ids is empty. Not called on cache hits (D-046).
+    15.  Post-response memory operations (v0.7, D-128) — non-fatal:
+         a. Extract entities from the turn (AC-2)
+         b. Store entities with embeddings (AC-2)
+         c. Consolidate old turns if threshold met (AC-5)
     """
     start_time = time.monotonic()
 
@@ -233,6 +484,7 @@ async def handle_query(event: dict[str, Any]) -> None:
     conversation_id = uuid.UUID(event["conversation_id"])
     user_input = event["input_text"]
     zone_scope = event.get("zone_scope", "personal")
+    source_surface = event.get("source_surface", "telegram")  # D-146: route response to origin surface
 
     # Increment query counter (D-122 Phase 2)
     queries_total.inc()
@@ -249,6 +501,59 @@ async def handle_query(event: dict[str, Any]) -> None:
     # TTL-cached (60s). On DB failure, returns stale or empty cache gracefully.
     # Used for: (a) action intent validation, (b) system prompt injection.
     available_tools = await registry.get_tools()
+
+    # 2.5. Self-knowledge detection — v0.12 (D-149)
+    # Runs after tool registry fetch so available_tools is in scope.
+    # Runs before action intent so "what tools can you delete?" hits self-knowledge.
+    self_knowledge_intent = _detect_self_knowledge_intent(user_input)
+    if self_knowledge_intent:
+        sk_payload = await _handle_self_knowledge_query(
+            self_knowledge_intent, zone_scope, event_id,
+            source_surface, available_tools,
+        )
+        cache.set(conversation_id, event_id, sk_payload)
+        await _emit_event(
+            _EVENT_QUERY_RESPONSE,
+            {**sk_payload, "conversation_id": str(conversation_id)},
+        )
+        query_duration_seconds.observe(time.monotonic() - start_time)
+        return
+
+    # 2.6. Config intent detection — v0.12 (D-149)
+    # Conversational config changes route through Block 9 confirmation gate (D-006).
+    # Spend cap is the only config type supported here; worker.reschedule requires
+    # explicit cron syntax and is handled by Block 23 commands instead.
+    new_cap = _detect_spend_cap_intent(user_input)
+    if new_cap is not None:
+        cap_event_id = uuid.uuid4()
+        await _emit_event(
+            "action.pending",
+            {
+                "event_id": str(cap_event_id),
+                "conversation_id": str(conversation_id),
+                "zone_scope": zone_scope,
+                "payload": {
+                    "action_type": "config.set_spend_cap",
+                    "action_target": new_cap,
+                    "action_description": f"Set daily spend cap to ${float(new_cap):.2f}.",
+                    "source_surface": source_surface,
+                },
+            },
+        )
+        cap_response = {
+            "event_id": str(event_id),
+            "response_text": (
+                f"I'll set the daily spend cap to ${float(new_cap):.2f}. "
+                "I'll confirm before making the change."
+            ),
+            "confidence": {"chunks_returned": 0, "highest_relevance_score": 0.0, "threshold_met": False},
+            "chunk_ids": [],
+            "source_surface": source_surface,
+        }
+        cache.set(conversation_id, event_id, cap_response)
+        await _emit_event(_EVENT_QUERY_RESPONSE, {**cap_response, "conversation_id": str(conversation_id)})
+        query_duration_seconds.observe(time.monotonic() - start_time)
+        return
 
     # 3. Action intent detection and registry validation — D-045, D-138
     # ACTION_VERBS heuristic detects that the user is requesting an action.
@@ -299,6 +604,7 @@ async def handle_query(event: dict[str, Any]) -> None:
                 "threshold_met": False,
             },
             "chunk_ids": [],
+            "source_surface": source_surface,
         }
         cache.set(conversation_id, event_id, response_payload)
         await _emit_event(
@@ -357,7 +663,8 @@ async def handle_query(event: dict[str, Any]) -> None:
     # 7. Spend cap gate — D-125, D-006
     # Check before assembling context and calling LLM.
     # Cap = pre-authorised daily limit set by owner; no confirmation dialog needed.
-    daily_cap = get_daily_cap()
+    # get_daily_cap() is async since v0.12 — reads config table before env var (D-149).
+    daily_cap = await get_daily_cap()
     if daily_cap is not None:
         today_spend = await get_today_spend_usd()
         if today_spend >= daily_cap:
@@ -394,6 +701,7 @@ async def handle_query(event: dict[str, Any]) -> None:
                     "threshold_met": False,
                 },
                 "chunk_ids": chunk_ids,
+                "source_surface": source_surface,
             }
             cache.set(conversation_id, event_id, response_payload)
             await _emit_event(
@@ -470,6 +778,7 @@ async def handle_query(event: dict[str, Any]) -> None:
         "response_text": response_text,
         "confidence": confidence,
         "chunk_ids": chunk_ids,
+        "source_surface": source_surface,  # D-146: Block 4 routes response to origin surface
     }
     cache.set(conversation_id, event_id, response_payload)
 

@@ -58,6 +58,13 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/clive-processing:${{ steps.meta.outputs.sha }}
 
+      - name: Build and push dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/dashboard
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clive-dashboard:${{ steps.meta.outputs.sha }}
+
   deploy:
     name: Deploy to production
     runs-on: self-hosted
@@ -90,6 +97,7 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          DASHBOARD_SECRET: ${{ secrets.DASHBOARD_SECRET }}
         run: |
           {
             echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
@@ -108,6 +116,7 @@ jobs:
             echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
             echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
             echo "SEARCH_API_KEY=${SEARCH_API_KEY}"
+            echo "DASHBOARD_SECRET=${DASHBOARD_SECRET}"
           } > /etc/clive/secrets.env
           chmod 600 /etc/clive/secrets.env
 
@@ -200,15 +209,17 @@ jobs:
           cp infrastructure/observability/caddy/Caddyfile \
             /home/clive/compose/observability/caddy/
 
-      - name: Deploy services
+      - name: Deploy application services
         env:
           ORCHESTRATOR_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           QUERY_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
+          DASHBOARD_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
-            up -d --pull always --no-deps orchestrator query telegram processing
+            up -d --pull always --no-deps \
+            orchestrator query telegram processing dashboard
 
       - name: Deploy observability and Caddy services
         env:
@@ -237,6 +248,7 @@ jobs:
           QUERY_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           TELEGRAM_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
+          DASHBOARD_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
           # Wait for slow-starting services (e.g. Loki ~14s) before checking state.
           sleep 30
@@ -256,6 +268,9 @@ jobs:
 
       - name: Verify Block 15 health
         run: docker exec clive-processing curl -sf http://localhost:8083/health
+
+      - name: Verify Block 2 dashboard health (v0.11, D-147)
+        run: docker exec clive-dashboard curl -sf http://localhost:8084/health
 
       - name: Trigger rollback on failure
         if: failure()

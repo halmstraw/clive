@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-145
+Last decision ID: D-150
 Last updated: 2026-05-17
 
 | ID | Title | Status | Date | Blocks | File |
@@ -154,3 +154,7 @@ Last updated: 2026-05-17
 | D-143 | CLIVE v0.10 scope — Blocks 6 (Users) and 7 (Trust Zones) | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-143-v10-scope.md](docs/decisions/D-143-v10-scope.md) |
 | D-144 | CLIVE v0.10 acceptance criteria — ten criteria for Blocks 6 and 7 delivery | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-144-v10-acceptance-criteria.md](docs/decisions/D-144-v10-acceptance-criteria.md) |
 | D-145 | CLIVE v0.10 signed off — all ten criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-145-v10-signed-off.md](docs/decisions/D-145-v10-signed-off.md) |
+| D-146 | CLIVE v0.11 scope — Multi-Surface + Sync/State (web dashboard) | Accepted | 2026-05-17 | Block 2, Block 3, Block 4, Block 5, Block 13, Block 23, Block 27, Block 28 | [D-146-v11-scope.md](docs/decisions/D-146-v11-scope.md) |
+| D-147 | CLIVE v0.11 acceptance criteria — ten criteria for Multi-Surface delivery | Accepted | 2026-05-17 | Block 2, Block 3, Block 4, Block 5, Block 13, Block 23, Block 27, Block 28 | [D-147-v11-acceptance-criteria.md](docs/decisions/D-147-v11-acceptance-criteria.md) |
+| D-149 | CLIVE v0.12 scope — Config/Admin complete + CLIVE Self-Knowledge | Accepted | 2026-05-17 | Block 8, Block 10, Block 13, Block 19, Block 23, Block 28, Block 29 | [D-149-v12-scope.md](docs/decisions/D-149-v12-scope.md) |
+| D-150 | CLIVE v0.12 acceptance criteria — ten criteria for Config/Admin + Self-Knowledge | Accepted | 2026-05-17 | Block 8, Block 10, Block 13, Block 19, Block 23, Block 28, Block 29 | [D-150-v12-acceptance-criteria.md](docs/decisions/D-150-v12-acceptance-criteria.md) |

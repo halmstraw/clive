@@ -62,13 +62,11 @@ jobs:
           echo "Sudo access confirmed."
 
       - name: Install Ansible and required collections
-        # pip is not in PATH on the self-hosted runner — use python3 -m pip.
-        # --user installs to ~/.local/bin without requiring sudo.
-        # GITHUB_PATH makes ~/.local/bin available to subsequent steps.
+        # Ubuntu disables ensurepip and pip by default — install via apt.
+        # ansible-playbook and ansible-galaxy land in /usr/bin (already in PATH).
+        # clive has passwordless sudo (granted by the step above).
         run: |
-          python3 -m ensurepip --user 2>/dev/null || true
-          python3 -m pip install --user --quiet ansible
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y --no-install-recommends ansible
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
 
       - name: Generate vars file from GitHub Secrets

@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir asyncpg structlog python-dotenv
+RUN pip install --no-cache-dir --only-binary :all: asyncpg structlog python-dotenv
 
 COPY seed_system_documents.py .
 

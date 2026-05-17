@@ -96,3 +96,28 @@
     owner: clive
     group: clive
     mode: "0750"
+
+- name: Configure logrotate for GitHub Actions runner diagnostics
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/clive-runner-diag
+    content: |
+      /home/clive/actions-runner/_diag/*.log {
+          daily
+          rotate 7
+          compress
+          missingok
+          notifempty
+          copytruncate
+      }
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Install weekly Docker prune cron job
+  ansible.builtin.cron:
+    name: "clive docker prune"
+    weekday: "0"
+    hour: "3"
+    minute: "0"
+    user: root
+    job: "docker system prune -f --filter 'until=168h' >> /var/log/clive-docker-prune.log 2>&1"

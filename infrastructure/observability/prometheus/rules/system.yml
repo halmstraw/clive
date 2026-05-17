@@ -2,18 +2,31 @@ groups:
   - name: clive_system
     rules:
 
-      # Disk usage above 80%
+      # Disk usage above 70% — warning
       - alert: DiskSpaceLow
         expr: |
           (
             1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})
-          ) > 0.80
+          ) > 0.70
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Disk usage above 80% on root filesystem"
+          summary: "Disk usage above 70% on root filesystem"
           description: "Root filesystem is {{ $value | humanizePercentage }} full. Free space is running low."
+
+      # Disk usage above 85% — critical
+      - alert: DiskSpaceCritical
+        expr: |
+          (
+            1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})
+          ) > 0.85
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage above 85% — intervention required"
+          description: "Root filesystem is {{ $value | humanizePercentage }} full. Run docker system prune or expand disk immediately."
 
       # Memory usage above 85%
       - alert: MemoryUsageHigh

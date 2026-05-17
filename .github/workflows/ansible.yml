@@ -41,11 +41,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ansible and required collections
-        # Ubuntu disables ensurepip — install via apt (no sudo needed for galaxy).
-        # Day-2 play runs as clive (become: false) so sudo is never required.
+      - name: Install required Ansible collections
+        # ansible is pre-installed on the VM by the base role (initial setup).
+        # ansible-galaxy installs collections to ~/.ansible/ — no sudo needed.
         run: |
-          sudo apt-get install -y --no-install-recommends ansible
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
 
       - name: Generate vars file from GitHub Secrets

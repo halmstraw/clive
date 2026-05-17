@@ -18,6 +18,7 @@
       - curl
       - git
       - htop
+      - ansible        # present on VM so the day-2 workflow needs no sudo to install it
     state: present
 
 - name: Configure unattended upgrades

@@ -1,21 +1,19 @@
 name: Ansible
 
 # Manual dispatch only — D-091 principle applied to Ansible too.
-# Use this workflow to re-run the Ansible playbook on the production VM:
+# Use this workflow for routine day-2 operations on the production VM:
 #   - After adding or rotating GitHub Secrets
-#   - After changes to any Ansible role or config file
-#   - After a VM rebuild (see docs/runbooks/terraform-bootstrap.md)
+#   - After changes to Ansible roles or observability config
 #
-# PREREQUISITE — one-time SSH step before first run:
-#   The self-hosted runner runs as the 'clive' user. The Ansible playbook
-#   uses 'become: true' to escalate to root for system tasks (apt, ufw, etc.).
-#   'clive' must have passwordless sudo before this workflow will succeed.
+# This workflow runs only the 'day2' tagged play (clive-secrets, compose-deploy,
+# postgres-init). These roles write only to paths owned by the clive user —
+# no sudo required, no root exposure from the CI runner.
 #
-#   SSH to the VM as root and run once:
-#     echo "clive ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/clive-ansible
-#     chmod 440 /etc/sudoers.d/clive-ansible
-#
-#   After that this workflow handles all future Ansible runs from GitHub.
+# For initial VM provisioning (base, docker, backup-cron, github-runner) run
+# the full playbook locally as root:
+#   ansible-playbook -i infrastructure/ansible/inventory \
+#     --extra-vars "@/tmp/clive_vars.json" \
+#     infrastructure/ansible/playbook.yml
 #
 # vars are sourced entirely from GitHub Secrets — no vault.yml required.
 
@@ -43,28 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify sudo access
-        # 'become: true' tasks in the playbook require passwordless sudo.
-        # If this step fails, SSH to the VM as root and run:
-        #   echo "clive ALL=(ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/clive-ansible
-        #   chmod 440 /etc/sudoers.d/clive-ansible
-        run: |
-          if ! sudo -n true 2>/dev/null; then
-            echo "::error::The 'clive' user does not have passwordless sudo."
-            echo ""
-            echo "One-time fix — SSH to the VM as root and run:"
-            echo "  echo 'clive ALL=(ALL) NOPASSWD: ALL' | tee /etc/sudoers.d/clive-ansible"
-            echo "  chmod 440 /etc/sudoers.d/clive-ansible"
-            echo ""
-            echo "Then re-run this workflow."
-            exit 1
-          fi
-          echo "Sudo access confirmed."
-
       - name: Install Ansible and required collections
-        # Ubuntu disables ensurepip and pip by default — install via apt.
-        # ansible-playbook and ansible-galaxy land in /usr/bin (already in PATH).
-        # clive has passwordless sudo (granted by the step above).
+        # Ubuntu disables ensurepip — install via apt (no sudo needed for galaxy).
+        # Day-2 play runs as clive (become: false) so sudo is never required.
         run: |
           sudo apt-get install -y --no-install-recommends ansible
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
@@ -140,10 +119,13 @@ jobs:
               print(f"Missing (will use role defaults if any): {missing}")
           EOF
 
-      - name: Run Ansible playbook
+      - name: Run Ansible playbook (day-2 operations only)
+        # Runs only the 'day2' tagged play — no root required.
+        # For initial VM setup run the full playbook locally as root.
         run: |
           ansible-playbook \
             -i infrastructure/ansible/inventory.ci \
+            --tags day2 \
             --extra-vars "@/tmp/clive_vars.json" \
             infrastructure/ansible/playbook.yml
 

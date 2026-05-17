@@ -81,18 +81,6 @@
     create_home: true
     system: false
 
-- name: Grant clive passwordless sudo
-  # Required so the GitHub Actions self-hosted runner (D-090), which runs as
-  # the 'clive' user, can execute Ansible 'become: true' tasks via
-  # .github/workflows/ansible.yml without an interactive password prompt.
-  ansible.builtin.copy:
-    dest: /etc/sudoers.d/clive-ansible
-    content: "clive ALL=(ALL) NOPASSWD: ALL\n"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-
 - name: Create /etc/clive directory
   ansible.builtin.file:
     path: /etc/clive

@@ -1,17 +1,33 @@
 ---
-- name: Configure CLIVE production server
+# Full provisioning play — run locally as root for initial VM setup.
+# Usage:
+#   ansible-playbook -i infrastructure/ansible/inventory \
+#     --extra-vars "@/tmp/clive_vars.json" \
+#     infrastructure/ansible/playbook.yml
+#
+# For routine operations (secret rotation, config updates) use the
+# day2 play below, which runs via .github/workflows/ansible.yml.
+
+- name: Initial setup — system configuration (run as root, once)
   hosts: clive
   become: true
-  # vars are passed via --extra-vars "@/tmp/clive_vars.json" sourced from GitHub Secrets.
-  # For the GitHub Actions workflow see .github/workflows/ansible.yml.
-  # For local / first-time runs see infrastructure/ansible/vault.example.yml
-  # for the full list of required variables.
-
+  tags: [initial-setup]
+  # vars are passed via --extra-vars "@/tmp/clive_vars.json"
+  # See infrastructure/ansible/vault.example.yml for the full variable list.
   roles:
     - base
     - docker
+    - backup-cron
+    - github-runner
+
+- name: Day-2 operations — application config (run as clive, routine)
+  hosts: clive
+  become: false
+  tags: [day2]
+  # These roles write only to paths owned by clive — no root needed.
+  # Run by .github/workflows/ansible.yml on every secret rotation or
+  # config file change.
+  roles:
     - clive-secrets
     - compose-deploy
     - postgres-init
-    - backup-cron
-    - github-runner

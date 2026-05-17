@@ -11,6 +11,8 @@ v0.8: structlog configured for JSON output — enables Loki field extraction (D-
 v0.8: Tool registry gate added — action.pending validated against Block 17 registry
       before dispatch to Block 9 (D-137). Admin tool enable/disable handlers wired.
 v0.9: Block 10 worker scheduler added — cron-based workers via scheduler_loop (D-140).
+v0.9: knowledge_maintenance worker — action.confirmed with action_type='knowledge.prune'
+      routed to knowledge_maintenance.handle_prune_confirmed (D-006, D-140).
 """
 
 from __future__ import annotations
@@ -75,6 +77,7 @@ from .push import (
     push_query_to_block8,
     push_response_to_surface,
 )
+from .workers import knowledge_maintenance
 
 load_dotenv("/etc/clive/secrets.env")
 
@@ -84,9 +87,10 @@ log = structlog.get_logger()
 async def dispatch_action_confirmed(event: CLIVEEvent) -> None:
     """Route action.confirmed to the correct handler based on action_type (v0.7).
 
-    document.delete  → Block 15 deletion handler (unchanged from v0.3)
-    web.search       → search_handler.handle_confirmed
+    document.delete   → Block 15 deletion handler (unchanged from v0.3)
+    web.search        → search_handler.handle_confirmed
     reminder.schedule → reminder_handler.handle_confirmed
+    knowledge.prune   → knowledge_maintenance.handle_prune_confirmed (v0.9)
     """
     action_type = event.payload.get("action_type", "")
     if action_type == "document.delete":
@@ -95,6 +99,8 @@ async def dispatch_action_confirmed(event: CLIVEEvent) -> None:
         await search_handler.handle_confirmed(event)
     elif action_type == "reminder.schedule":
         await reminder_handler.handle_confirmed(event)
+    elif action_type == "knowledge.prune":
+        await knowledge_maintenance.handle_prune_confirmed(event)
     else:
         log.warning("unhandled_action_type_on_confirmed", action_type=action_type)
 
@@ -108,6 +114,7 @@ async def main() -> None:
     await action.init_pool()          # Block 9 — Action Layer (v0.3)
     await reminder_handler.init_pool()  # Block 9 — Reminder handler (v0.7)
     await scheduler.init_pool()       # Block 10 — Worker scheduler (v0.9)
+    await knowledge_maintenance.init_pool()  # Block 10 — Knowledge maintenance (v0.9)
 
     # v0.8: bind registry gate to action pool — no new pool created (D-137).
     registry.set_pool(action._pool)

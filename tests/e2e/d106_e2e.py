@@ -76,8 +76,7 @@ AUDIT_TIMEOUT = 30    # seconds to wait for audit log entries
 # (avoids false positives from previous test runs)
 TEST_START_TS: str = ""
 
-# Shared string constants — avoids duplication across MinIO helper functions
-_MINIO_MC_IMAGE = "minio/mc"
+# Shared string constants — avoids duplication
 _EVENTS_PATH = "/events"
 _FEEDBACK_EXPLICIT = "feedback.explicit"
 
@@ -181,22 +180,23 @@ def _get_minio_creds() -> tuple[str, str]:
 
 
 def minio_pipe_upload(source_key: str, content: str) -> bool:
-    """Upload content string to MinIO via minio/mc pipe. Returns True on success.
+    """Upload content string to MinIO via mc pipe. Returns True on success.
 
-    Uses the minio/mc Docker image and the minio container's network namespace
-    so that mc can reach MinIO at localhost:9000 without any exposed host ports.
+    Executes mc inside the already-running minio container — no image pull
+    required. mc is bundled with the minio/minio server image.
     """
     user, passwd = _get_minio_creds()
     result = subprocess.run(
         [
-            "docker", "run", "--rm", "-i",
-            "--network", f"container:{MINIO_CONTAINER}",
+            "docker", "exec", "-i",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            _MINIO_MC_IMAGE, "pipe", f"local/{MINIO_BUCKET}/{source_key}",
+            MINIO_CONTAINER, "mc", "pipe", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         input=content,
         capture_output=True, text=True, timeout=60,
     )
+    if result.returncode != 0:
+        print(f"  → mc pipe stderr: {(result.stderr or result.stdout).strip()[:200]}")
     return result.returncode == 0
 
 
@@ -209,10 +209,9 @@ def minio_object_gone(source_key: str) -> bool:
     user, passwd = _get_minio_creds()
     result = subprocess.run(
         [
-            "docker", "run", "--rm",
-            "--network", f"container:{MINIO_CONTAINER}",
+            "docker", "exec",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            _MINIO_MC_IMAGE, "ls", f"local/{MINIO_BUCKET}/{source_key}",
+            MINIO_CONTAINER, "mc", "ls", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         capture_output=True, text=True, timeout=30,
     )
@@ -224,10 +223,9 @@ def minio_rm(source_key: str) -> None:
     user, passwd = _get_minio_creds()
     subprocess.run(
         [
-            "docker", "run", "--rm",
-            "--network", f"container:{MINIO_CONTAINER}",
+            "docker", "exec",
             "-e", f"MC_HOST_local=http://{user}:{passwd}@localhost:9000",
-            _MINIO_MC_IMAGE, "rm", f"local/{MINIO_BUCKET}/{source_key}",
+            MINIO_CONTAINER, "mc", "rm", f"local/{MINIO_BUCKET}/{source_key}",
         ],
         capture_output=True, text=True, timeout=30,
     )

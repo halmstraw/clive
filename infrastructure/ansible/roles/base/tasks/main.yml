@@ -120,7 +120,7 @@
     hour: "3"
     minute: "0"
     user: root
-    job: "docker system prune -f --filter 'until=168h' >> /var/log/clive-docker-prune.log 2>&1"
+    job: "docker system prune -af --filter 'until=168h' >> /var/log/clive-docker-prune.log 2>&1"
 
 # ---------------------------------------------------------------------------
 # Block 25 — Grafana Alloy config deployment

@@ -220,6 +220,12 @@ jobs:
             | xargs -r docker volume rm \
             || true
 
+      - name: Prune old Docker images
+        # Remove all images not attached to a running container.
+        # Running containers pin their current image — nothing live is removed.
+        # Prevents old SHA-tagged images from accumulating across deploys.
+        run: docker image prune -a -f
+
   verify:
     name: Verify deployment
     runs-on: self-hosted

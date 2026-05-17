@@ -9,6 +9,8 @@ layer, logged but not a full event bus round-trip.
 
 v0.3: retrieve_document_by_filename added for T8 deletion lookup (D-109).
 v0.6: retrieve_status extended with today's LLM spend and daily cap (D-125).
+v0.10: _is_valid_zone added — zone_scope validated against clive_state.zones
+       before retrieval (D-143). Fail-open on DB error.
 """
 
 from __future__ import annotations
@@ -37,6 +39,28 @@ async def init_pool() -> None:
     log.info("retrieval_pool_initialised")
 
 
+async def _is_valid_zone(zone_scope: str) -> bool:
+    """Check that zone_scope exists in clive_state.zones.
+
+    D-143: zone validation before retrieval. Returns False for unknown zones.
+    Non-fatal DB error: log WARN and return True (fail open — do not block
+    retrieval on DB unavailability; zone boundary enforcement is best-effort
+    at this layer when DB is degraded).
+    """
+    if _pool is None:
+        return True   # pool not init'd — fail open
+    try:
+        async with _pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT 1 FROM clive_state.zones WHERE zone_name = $1",
+                zone_scope,
+            )
+        return row is not None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("zone_validation_error", zone_scope=zone_scope, exc=str(exc))
+        return True   # fail open on DB error
+
+
 async def retrieve(
     retrieval_query: str,
     zone_scope: str,
@@ -49,9 +73,18 @@ async def retrieve(
     relevance_score, zone_of_origin, chunk_id.
 
     Enforces zone boundary at query time (D-050).
+    D-143: unknown zone_scope returns empty result immediately.
     """
     if _pool is None:
         raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    if not await _is_valid_zone(zone_scope):
+        log.warning(
+            "retrieval_unknown_zone",
+            zone_scope=zone_scope,
+            conversation_id=str(conversation_id),
+        )
+        return {"ranked_chunks": [], "result_count": 0}
 
     log.info(
         "retrieval_start",
@@ -121,6 +154,8 @@ async def retrieve_system_document(
     """Retrieve a system document (personality or alignment rules) by identity.
 
     Returns full document content, version_id, timestamp, is_active.
+    Note: zone_scope validation is NOT applied here — system documents are
+    not per-user data; Block 16 validates by document_type and is_active.
     """
     if _pool is None:
         raise RuntimeError(_ERR_POOL_NOT_INIT)
@@ -164,12 +199,17 @@ async def retrieve_document_by_filename(
 
     D-109: source_key format is {uuid}/{original_filename}.
     Matches WHERE source_key LIKE '%/' || filename.
+    D-143: unknown zone_scope returns empty result immediately.
 
     Returns {source_keys: [...], chunk_count: N}.
     If no match: source_keys = [], chunk_count = 0.
     """
     if _pool is None:
         raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    if not await _is_valid_zone(zone_scope):
+        log.warning("retrieval_unknown_zone", zone_scope=zone_scope)
+        return {"source_keys": [], "chunk_count": 0}
 
     async with _pool.acquire() as conn:
         rows = await conn.fetch(
@@ -208,11 +248,16 @@ async def retrieve_document_list(
 
     source_key format is {uuid}/{original_filename} — strips UUID prefix
     to return the original filename for display.
+    D-143: unknown zone_scope returns empty result immediately.
 
     Returns {documents: [{filename, source_key, chunk_count, ingested_at}], total: N}.
     """
     if _pool is None:
         raise RuntimeError(_ERR_POOL_NOT_INIT)
+
+    if not await _is_valid_zone(zone_scope):
+        log.warning("retrieval_unknown_zone", zone_scope=zone_scope)
+        return {"documents": [], "total": 0}
 
     async with _pool.acquire() as conn:
         rows = await conn.fetch(

@@ -4,6 +4,7 @@ D-006: every irreversible action requires explicit owner confirmation.
 D-025: idempotent — duplicate action_request_id is silently acknowledged.
 D-026: per-conversation ordering.
 D-067: every confirmation request, response, and timeout is audited.
+D-143: zone_scope carried from requesting event into pending_actions row (v0.10).
 
 Lifecycle:
   action.pending        → received from Block 23
@@ -76,6 +77,8 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
 
     D-025: idempotent — if action_request_id already exists, re-emit
     confirmation_requested (Block 13 retry may redeliver).
+    D-143: zone_scope is extracted from the event payload and stored in
+    the pending_actions row so zone context is preserved through the lifecycle.
     """
     payload = event.payload
     action_request_id_raw = payload.get("action_request_id")
@@ -91,12 +94,13 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
     action_description = payload.get("action_description", "")
     chat_id = int(payload.get("chat_id", 0))
     suppress_telegram = bool(payload.get("suppress_telegram", False))
+    zone_scope = payload.get("zone_scope", "personal")
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ACTION_TIMEOUT_SECONDS)
 
     _STANDARD_FIELDS = {
         "action_request_id", "action_type", "action_target", "action_description",
-        "chat_id", "suppress_telegram", "conversation_id",
+        "chat_id", "suppress_telegram", "conversation_id", "zone_scope",
     }
     metadata = {k: v for k, v in payload.items() if k not in _STANDARD_FIELDS}
 
@@ -125,8 +129,9 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
                 """
                 INSERT INTO clive_state.pending_actions
                     (action_request_id, action_type, action_target, action_description,
-                     conversation_id, chat_id, status, created_at, expires_at, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)
+                     conversation_id, chat_id, status, created_at, expires_at, metadata,
+                     zone_scope)
+                VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10)
                 ON CONFLICT (action_request_id) DO NOTHING
                 """,
                 action_request_id,
@@ -138,12 +143,14 @@ async def handle_action_pending(event: CLIVEEvent) -> None:
                 now,
                 expires_at,
                 json.dumps(metadata),
+                zone_scope,
             )
             log.info(
                 "action_pending_stored",
                 action_request_id=str(action_request_id),
                 action_type=action_type,
                 action_target=action_target,
+                zone_scope=zone_scope,
             )
 
     # Emit action.confirmation_requested to Block 23 via bus

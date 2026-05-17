@@ -67,25 +67,10 @@
     dest: /home/clive/compose/observability/caddy/Caddyfile
     mode: "0644" # NOSONAR — world-read required: caddy container reads via bind mount
 
-- name: Start Compose stack
+# Restart Alloy so it picks up the new secrets.env (Grafana Cloud credentials).
+# postgres, minio, and all application services are already running —
+# starting or health-checking them here is an initial-setup concern, not day-2.
+- name: Restart Alloy to apply updated secrets
   ansible.builtin.command:
-    cmd: docker compose -f /home/clive/compose/docker-compose.yml up -d postgres minio
+    cmd: docker compose -f /home/clive/compose/docker-compose.yml restart alloy
   changed_when: true
-
-- name: Wait for MinIO to be healthy
-  ansible.builtin.uri:
-    url: http://localhost:9000/minio/health/live
-    status_code: 200
-  register: minio_health
-  until: minio_health.status == 200
-  retries: 12
-  delay: 5
-
-- name: Create MinIO raw store bucket
-  ansible.builtin.shell: |
-    docker run --rm \
-      --network container:clive-minio \
-      -e MC_HOST_local="http://{{ minio_root_user }}:{{ minio_root_password }}@localhost:9000" \
-      minio/mc mb --ignore-existing "local/{{ minio_raw_bucket }}"
-  register: mc_mb_result
-  changed_when: '"Bucket created" in mc_mb_result.stdout'

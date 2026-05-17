@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-144
+Last decision ID: D-145
 Last updated: 2026-05-17
 
 | ID | Title | Status | Date | Blocks | File |
@@ -153,3 +153,4 @@ Last updated: 2026-05-17
 | D-142 | CLIVE v0.9 signed off — all nine criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 10, Block 12, Block 13, Block 8, Block 9, Block 16, Block 23, Block 25, Block 28 | [D-142-v09-signed-off.md](docs/decisions/D-142-v09-signed-off.md) |
 | D-143 | CLIVE v0.10 scope — Blocks 6 (Users) and 7 (Trust Zones) | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-143-v10-scope.md](docs/decisions/D-143-v10-scope.md) |
 | D-144 | CLIVE v0.10 acceptance criteria — ten criteria for Blocks 6 and 7 delivery | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-144-v10-acceptance-criteria.md](docs/decisions/D-144-v10-acceptance-criteria.md) |
+| D-145 | CLIVE v0.10 signed off — all ten criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 6, Block 7, Block 8, Block 9, Block 16, Block 17, Block 23, Block 28 | [D-145-v10-signed-off.md](docs/decisions/D-145-v10-signed-off.md) |

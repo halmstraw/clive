@@ -4,8 +4,8 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-138
-Last updated: 2026-05-16
+Last decision ID: D-141
+Last updated: 2026-05-17
 
 | ID | Title | Status | Date | Blocks | File |
 |----|-------|--------|------|--------|------|
@@ -147,3 +147,6 @@ Last updated: 2026-05-16
 | D-136 | v0.11 second surface is a lightweight web dashboard | Accepted | 2026-05-16 | Block 2, Block 3, Block 4, Block 5 | [D-136-v011-second-surface-web-dashboard.md](docs/decisions/D-136-v011-second-surface-web-dashboard.md) |
 | D-137 | CLIVE v0.8 scope — Block 17 Tool Registry primary, Block 19 first capability, Block 3 partial | Accepted | 2026-05-16 | Block 17, Block 19, Block 3, Block 8, Block 13, Block 23, Block 28 | [D-137-v08-scope.md](docs/decisions/D-137-v08-scope.md) |
 | D-138 | CLIVE v0.8 acceptance criteria — six criteria for Block 17 complete delivery | Accepted | 2026-05-16 | Block 17, Block 8, Block 13, Block 23, Block 28 | [D-138-v08-acceptance-criteria.md](docs/decisions/D-138-v08-acceptance-criteria.md) |
+| D-139 | CLIVE v0.8 signed off — all six criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 17, Block 8, Block 13, Block 23, Block 19, Block 3, Block 28 | [D-139-v08-signed-off.md](docs/decisions/D-139-v08-signed-off.md) |
+| D-140 | CLIVE v0.9 scope — Block 10 (Workers) primary; Block 12 (Context Window) closes partial | Accepted | 2026-05-17 | Block 10, Block 12, Block 13, Block 9, Block 16, Block 23, Block 25 | [D-140-v09-scope.md](docs/decisions/D-140-v09-scope.md) |
+| D-141 | CLIVE v0.9 acceptance criteria — nine criteria for Block 10 and Block 12 delivery | Accepted | 2026-05-17 | Block 10, Block 12, Block 13, Block 8, Block 9, Block 16, Block 23, Block 25, Block 28 | [D-141-v09-acceptance-criteria.md](docs/decisions/D-141-v09-acceptance-criteria.md) |

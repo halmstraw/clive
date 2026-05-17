@@ -1,0 +1,191 @@
+// ============================================================================
+// Grafana Alloy configuration — CLIVE observability
+// Replaces self-hosted Prometheus + Loki + Grafana + Promtail stack.
+// D-117 superseded (2026-05-17): Alloy + Grafana Cloud replaces self-hosted stack.
+// D-121 superseded (2026-05-17): Grafana Cloud provides its own URL.
+//
+// D-118 PRESERVED — alert routing constraint:
+//   Alerts MUST route to the orchestrator webhook at /alerts (Block 13).
+//   They must NOT go directly to Telegram.
+//
+//   Grafana Cloud cannot reach internal Docker hostnames (orchestrator:8080).
+//   The orchestrator alert endpoint must be exposed publicly before configuring
+//   the Grafana Cloud contact point. Recommended approach:
+//
+//     1. Add a Caddy handle block to clive.halmshaw.co.uk in the Caddyfile:
+//
+//          clive.halmshaw.co.uk {
+//              reverse_proxy dashboard:8084
+//
+//              handle /alerts {
+//                  reverse_proxy orchestrator:8080
+//              }
+//          }
+//
+//        This exposes https://clive.halmshaw.co.uk/alerts publicly over TLS.
+//        No additional Hetzner firewall rule is needed (port 443 already open).
+//
+//     2. In Grafana Cloud UI:
+//        → Alerting → Contact points → Add contact point
+//          Name:        CLIVE Orchestrator
+//          Type:        Webhook
+//          URL:         https://clive.halmshaw.co.uk/alerts
+//          HTTP method: POST
+//
+//     3. In Grafana Cloud UI:
+//        → Alerting → Notification policies
+//          Set the default policy to route to "CLIVE Orchestrator".
+//
+//   The Caddy change is a separate infrastructure task and does not block
+//   the Grafana Cloud migration itself.
+//
+// DASHBOARD IMPORT — see infrastructure/observability/grafana/dashboards/GRAFANA_CLOUD_IMPORT.md
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// Prometheus remote_write — ship all scraped metrics to Grafana Cloud
+// Env vars injected from /etc/clive/secrets.env via Docker env_file
+// ---------------------------------------------------------------------------
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_CLOUD_PROMETHEUS_URL")
+
+    basic_auth {
+      username = env("GRAFANA_CLOUD_PROMETHEUS_USER")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scrape: Alloy self-metrics
+// Replaces the "prometheus" self-scrape job from the legacy prometheus.yml.
+// Alloy exposes its own metrics on port 12345.
+// ---------------------------------------------------------------------------
+
+prometheus.scrape "alloy" {
+  targets    = [{"__address__" = "localhost:12345"}]
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name   = "alloy"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+// ---------------------------------------------------------------------------
+// Scrape: application services — Block 25 Phase 2 (D-122)
+// Mirrors all application jobs from legacy prometheus.yml
+// ---------------------------------------------------------------------------
+
+prometheus.scrape "clive_orchestrator" {
+  targets      = [{"__address__" = "orchestrator:8080"}]
+  metrics_path = "/metrics"
+  forward_to   = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name     = "clive-orchestrator"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+prometheus.scrape "clive_query" {
+  targets      = [{"__address__" = "query:8081"}]
+  metrics_path = "/metrics"
+  forward_to   = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name     = "clive-query"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+prometheus.scrape "clive_telegram" {
+  targets      = [{"__address__" = "telegram:8082"}]
+  metrics_path = "/metrics"
+  forward_to   = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name     = "clive-telegram"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+prometheus.scrape "clive_processing" {
+  targets      = [{"__address__" = "processing:8083"}]
+  metrics_path = "/metrics"
+  forward_to   = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name     = "clive-processing"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+// ---------------------------------------------------------------------------
+// Scrape: infrastructure exporters — retained from legacy stack
+// node-exporter and postgres-exporter kept as scrape targets
+// ---------------------------------------------------------------------------
+
+prometheus.scrape "postgres" {
+  targets    = [{"__address__" = "postgres-exporter:9187"}]
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name   = "postgres"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+prometheus.scrape "node" {
+  targets    = [{"__address__" = "node-exporter:9100"}]
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+  job_name   = "node"
+
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
+// ---------------------------------------------------------------------------
+// Log collection: Docker container logs → Grafana Cloud Loki
+// Discovers all running containers via the Docker socket.
+// Alloy container must have /var/run/docker.sock mounted (see docker-compose.yml).
+// ---------------------------------------------------------------------------
+
+discovery.docker "all_containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.all_containers.targets
+
+  // Extract clean container name — Docker prefixes names with a slash
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Carry the Docker Compose service name as an explicit label
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_containers.output
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+// ---------------------------------------------------------------------------
+// Loki write — ship logs to Grafana Cloud Loki
+// Env vars injected from /etc/clive/secrets.env via Docker env_file
+// ---------------------------------------------------------------------------
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_CLOUD_LOKI_URL")
+
+    basic_auth {
+      username = env("GRAFANA_CLOUD_LOKI_USER")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}

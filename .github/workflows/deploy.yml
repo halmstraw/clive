@@ -93,11 +93,13 @@ jobs:
           AUDIT_WRITER_PASSWORD: ${{ secrets.AUDIT_WRITER_PASSWORD }}
           MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           DASHBOARD_SECRET: ${{ secrets.DASHBOARD_SECRET }}
+          GRAFANA_CLOUD_PROMETHEUS_URL: ${{ secrets.GRAFANA_CLOUD_PROMETHEUS_URL }}
+          GRAFANA_CLOUD_PROMETHEUS_USER: ${{ secrets.GRAFANA_CLOUD_PROMETHEUS_USER }}
+          GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          GRAFANA_CLOUD_API_KEY: ${{ secrets.GRAFANA_CLOUD_API_KEY }}
         run: |
           {
             echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
@@ -112,11 +114,13 @@ jobs:
             echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}"
             echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
             echo "MINIO_ENDPOINT=http://minio:9000"
-            echo "GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}"
-            echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
-            echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
             echo "SEARCH_API_KEY=${SEARCH_API_KEY}"
             echo "DASHBOARD_SECRET=${DASHBOARD_SECRET}"
+            echo "GRAFANA_CLOUD_PROMETHEUS_URL=${GRAFANA_CLOUD_PROMETHEUS_URL}"
+            echo "GRAFANA_CLOUD_PROMETHEUS_USER=${GRAFANA_CLOUD_PROMETHEUS_USER}"
+            echo "GRAFANA_CLOUD_LOKI_URL=${GRAFANA_CLOUD_LOKI_URL}"
+            echo "GRAFANA_CLOUD_LOKI_USER=${GRAFANA_CLOUD_LOKI_USER}"
+            echo "GRAFANA_CLOUD_API_KEY=${GRAFANA_CLOUD_API_KEY}"
           } > /etc/clive/secrets.env
           chmod 600 /etc/clive/secrets.env
 
@@ -174,38 +178,14 @@ jobs:
         run: |
           # Wipe and rebuild the entire config tree on each deploy.
           # All persistent data lives in named Docker volumes — this directory
-          # holds only config files, so a full rebuild is safe and eliminates
-          # the file-vs-directory confusion caused by prior Docker runs.
+          # holds only config files, so a full rebuild is safe.
           rm -rf /home/clive/compose/observability
           mkdir -p \
-            /home/clive/compose/observability/prometheus/rules \
-            /home/clive/compose/observability/loki \
-            /home/clive/compose/observability/promtail \
-            /home/clive/compose/observability/grafana/provisioning/datasources \
-            /home/clive/compose/observability/grafana/provisioning/dashboards \
-            /home/clive/compose/observability/grafana/provisioning/alerting \
-            /home/clive/compose/observability/grafana/dashboards \
+            /home/clive/compose/observability/alloy \
             /home/clive/compose/observability/caddy
 
-          cp infrastructure/observability/prometheus/prometheus.yml \
-            /home/clive/compose/observability/prometheus/
-          cp infrastructure/observability/prometheus/rules/services.yml \
-            infrastructure/observability/prometheus/rules/system.yml \
-            /home/clive/compose/observability/prometheus/rules/
-          cp infrastructure/observability/loki/config.yml \
-            /home/clive/compose/observability/loki/
-          cp infrastructure/observability/promtail/config.yml \
-            /home/clive/compose/observability/promtail/
-          cp infrastructure/observability/grafana/provisioning/datasources/datasources.yml \
-            /home/clive/compose/observability/grafana/provisioning/datasources/
-          cp infrastructure/observability/grafana/provisioning/dashboards/dashboards.yml \
-            /home/clive/compose/observability/grafana/provisioning/dashboards/
-          cp infrastructure/observability/grafana/provisioning/alerting/contact_points.yml \
-            /home/clive/compose/observability/grafana/provisioning/alerting/
-          cp infrastructure/observability/grafana/dashboards/system_overview.json \
-            /home/clive/compose/observability/grafana/dashboards/
-          cp infrastructure/observability/grafana/dashboards/event_bus.json \
-            /home/clive/compose/observability/grafana/dashboards/
+          cp infrastructure/observability/alloy/config.alloy \
+            /home/clive/compose/observability/alloy/
           cp infrastructure/observability/caddy/Caddyfile \
             /home/clive/compose/observability/caddy/
 
@@ -222,15 +202,23 @@ jobs:
             orchestrator query telegram processing dashboard
 
       - name: Deploy observability and Caddy services
-        env:
-          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           docker compose -f infrastructure/compose/docker-compose.yml \
             up -d --remove-orphans \
-            caddy prometheus loki promtail grafana node-exporter postgres-exporter
+            alloy node-exporter postgres-exporter caddy
+
+      - name: Remove legacy observability volumes
+        # prometheus_data, loki_data, grafana_data are no longer declared in
+        # docker-compose.yml (D-117 superseded). --remove-orphans above has
+        # already stopped and removed the old containers; now drop the volumes
+        # to free the disk space that prompted this migration.
+        # Uses grep to match regardless of Docker Compose project name prefix.
+        # Silently skips any volume that does not exist.
+        run: |
+          docker volume ls -q \
+            | grep -E '_(prometheus|loki|grafana)_data$' \
+            | xargs -r docker volume rm \
+            || true
 
   verify:
     name: Verify deployment
@@ -250,8 +238,7 @@ jobs:
           PROCESSING_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
           DASHBOARD_IMAGE_TAG: ${{ needs.build.outputs.orchestrator_tag }}
         run: |
-          # Wait for slow-starting services (e.g. Loki ~14s) before checking state.
-          sleep 30
+          sleep 10
           docker compose -f infrastructure/compose/docker-compose.yml ps --format json \
           | python3 -c '
           import json, sys

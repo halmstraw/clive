@@ -1,7 +1,10 @@
-grafana.halmshaw.co.uk {
-    reverse_proxy grafana:3000
-}
-
 clive.halmshaw.co.uk {
     reverse_proxy dashboard:8084
+
+    # D-118: expose the orchestrator alert webhook publicly so Grafana Cloud
+    # can POST to it. Grafana Cloud contact point URL:
+    #   https://clive.halmshaw.co.uk/alerts
+    handle /alerts {
+        reverse_proxy orchestrator:8080
+    }
 }

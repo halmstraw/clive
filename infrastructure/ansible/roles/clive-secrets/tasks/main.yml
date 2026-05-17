@@ -18,8 +18,11 @@
       MINIO_ROOT_USER={{ minio_root_user }}
       MINIO_ROOT_PASSWORD={{ minio_root_password }}
       MINIO_ENDPOINT=http://minio:9000
-      GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
-      GOOGLE_CLIENT_ID={{ google_client_id }}
-      GOOGLE_CLIENT_SECRET={{ google_client_secret }}
       SEARCH_API_KEY={{ search_api_key }}
+      DASHBOARD_SECRET={{ dashboard_secret }}
+      GRAFANA_CLOUD_PROMETHEUS_URL={{ grafana_cloud_prometheus_url }}
+      GRAFANA_CLOUD_PROMETHEUS_USER={{ grafana_cloud_prometheus_user }}
+      GRAFANA_CLOUD_LOKI_URL={{ grafana_cloud_loki_url }}
+      GRAFANA_CLOUD_LOKI_USER={{ grafana_cloud_loki_user }}
+      GRAFANA_CLOUD_API_KEY={{ grafana_cloud_api_key }}
   no_log: true

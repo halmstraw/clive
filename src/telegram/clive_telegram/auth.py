@@ -106,7 +106,7 @@ async def auth_cache_refresh_loop() -> None:
             await asyncio.sleep(_AUTH_CACHE_REFRESH_SECONDS)
             await refresh_auth_cache()
         except asyncio.CancelledError:
-            return
+            raise
 
 
 def is_authenticated(chat_id: int) -> bool:

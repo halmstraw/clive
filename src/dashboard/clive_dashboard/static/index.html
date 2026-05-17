@@ -236,9 +236,9 @@
   </header>
 
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('query')">Query</div>
-    <div class="tab" onclick="switchTab('pending')">Pending Actions</div>
-    <div class="tab" onclick="switchTab('history')">History</div>
+    <div class="tab active" role="button" tabindex="0" onclick="switchTab('query')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('query')">Query</div>
+    <div class="tab" role="button" tabindex="0" onclick="switchTab('pending')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('pending')">Pending Actions</div>
+    <div class="tab" role="button" tabindex="0" onclick="switchTab('history')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('history')">History</div>
   </div>
 
   <!-- Query tab -->

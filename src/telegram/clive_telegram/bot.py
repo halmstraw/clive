@@ -73,7 +73,7 @@ _SEARCH_RE = re.compile(
 )
 
 _REMINDER_RE = re.compile(
-    r"^remind\s+me\s+(?:about|to)\s+((?:\S+\s+)*?\S+)\s+at\s+(.+)$",
+    r"^remind\s+me\s+(?:about|to)\s+(.+?)\s+at\s+(.+)$",
     re.IGNORECASE,
 )
 

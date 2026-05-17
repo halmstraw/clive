@@ -34,6 +34,7 @@ class TestLoadDispatch:
         assert "knowledge_maintenance" in scheduler_mod._WORKERS
 
 
+
 # ---------------------------------------------------------------------------
 # _load_worker_configs
 # ---------------------------------------------------------------------------
@@ -138,6 +139,37 @@ class TestRunWorker:
             scheduler_mod._pool = pool
             scheduler_mod._WORKERS["daily_digest"] = failing_worker
             # Should not raise — exception is caught
+            await scheduler_mod._run_worker(config)
+        finally:
+            scheduler_mod._pool = original
+            scheduler_mod._WORKERS.clear()
+            scheduler_mod._WORKERS.update(original_workers)
+
+    @pytest.mark.asyncio
+    async def test_run_worker_error_status_update_failure_does_not_propagate(self):
+        """When both the worker and the error-status DB update fail, scheduler still stays alive."""
+        run_id = uuid.uuid4()
+
+        mock_conn = AsyncMock()
+        mock_conn.fetchval = AsyncMock(return_value=run_id)
+        # execute raises — simulates the error-status UPDATE failing
+        mock_conn.execute = AsyncMock(side_effect=Exception("db update error"))
+        pool = _make_mock_pool(mock_conn)
+
+        failing_worker = AsyncMock(side_effect=Exception("worker crash"))
+
+        config = {
+            "worker_name": "daily_digest",
+            "cron_expression": "0 8 * * *",
+            "execution_scope": [],
+        }
+
+        original = scheduler_mod._pool
+        original_workers = dict(scheduler_mod._WORKERS)
+        try:
+            scheduler_mod._pool = pool
+            scheduler_mod._WORKERS["daily_digest"] = failing_worker
+            # Should not raise — inner exception is caught at lines 310-311
             await scheduler_mod._run_worker(config)
         finally:
             scheduler_mod._pool = original

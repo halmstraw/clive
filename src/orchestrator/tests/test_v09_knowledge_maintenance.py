@@ -256,6 +256,23 @@ class TestRunStaleChunksFound:
         conn.execute.assert_not_called()
         assert "Flagged" in result  # returns outcome but did not delete
 
+    @pytest.mark.asyncio
+    async def test_naive_created_at_is_normalised(self):
+        """Naive created_at datetime is localised to UTC (line 127 guard)."""
+        naive_row = {
+            "chunk_id": uuid.uuid4(),
+            "source_attribution": "doc.txt",
+            "created_at": datetime.datetime.utcnow() - datetime.timedelta(days=100),
+        }
+        pool, _ = _make_mock_pool(fetch_return=[naive_row])
+        mock_confirm = AsyncMock()
+        scoped_push = {"request_confirmation": mock_confirm}
+
+        with patch.dict("os.environ", {"TELEGRAM_OWNER_CHAT_ID": "99001"}):
+            result = await run(run_id=str(uuid.uuid4()), pool=pool, scoped_push=scoped_push)
+
+        assert result is not None
+
 
 # ---------------------------------------------------------------------------
 # handle_prune_confirmed() — correct deletion

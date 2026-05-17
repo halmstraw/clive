@@ -35,6 +35,13 @@ v0.8: Block 17 Tool Registry integration (D-137, D-138).
       * Tool not in registry / registry empty → no event emitted; respond with
         "That capability is not currently available." (D-138 requirement).
   - This is Block 8's own gate. Block 13 also validates independently (D-138).
+
+v0.9: Block 16 retrieval tracking (D-140).
+  - After each fresh query that returns non-empty chunk_ids: increment
+    retrieval_count and update last_retrieved_at on the returned chunks.
+  - Non-fatal: any DB failure is caught and logged as WARN; query unaffected.
+  - Skipped on cache hits (D-046) — only fresh retrievals are tracked.
+  - Enables knowledge_maintenance worker (Wave 3-B) to identify stale chunks.
 """
 
 from __future__ import annotations
@@ -50,6 +57,7 @@ import structlog
 from . import context as ctx
 from . import llm
 from . import memory
+from .db import get_pool
 from .idempotency import cache
 from .metrics import (
     llm_cost_cap_exceeded_total,
@@ -159,6 +167,41 @@ def _compute_confidence(
     }
 
 
+async def _update_chunk_retrieval_stats(chunk_ids: list[str]) -> None:
+    """Increment retrieval_count and update last_retrieved_at for accessed chunks.
+
+    Called after each fresh query that returns non-empty chunk_ids (v0.9, D-140).
+    Not called on cache hits (D-046). Action-intent early returns produce
+    chunk_ids=[] so the early-exit guard covers that case automatically.
+
+    Non-fatal: any DB failure is caught and logged as WARN. Query success
+    is unaffected regardless of tracking outcome.
+
+    D-043: direct DB write within Block 8's own execution context —
+    same pattern as memory entity storage (v0.7).
+    """
+    if not chunk_ids:
+        return
+    try:
+        pool = get_pool()
+        await pool.execute(
+            """
+            UPDATE clive_search.chunks
+            SET retrieval_count = retrieval_count + 1,
+                last_retrieved_at = NOW()
+            WHERE chunk_id = ANY($1::uuid[])
+            """,
+            chunk_ids,
+        )
+        log.debug("chunk_retrieval_tracked", chunk_count=len(chunk_ids))
+    except Exception as exc:
+        log.warning(
+            "chunk_retrieval_tracking_failed",
+            chunk_count=len(chunk_ids),
+            error=str(exc),
+        )
+
+
 async def handle_query(event: dict[str, Any]) -> None:
     """Handle a query.received event.
 
@@ -176,7 +219,10 @@ async def handle_query(event: dict[str, Any]) -> None:
     11. Record LLM usage to clive_state.llm_usage (D-125)
     12. Build response payload, cache, emit query.response (v0.3: include chunk_ids)
     13. Record query duration (D-122 Phase 2)
-    14. Post-response memory operations (v0.7, D-128) — non-fatal:
+    14. Retrieval tracking (v0.9, D-140) — non-fatal:
+        Update retrieval_count + last_retrieved_at on returned chunks.
+        Skipped if chunk_ids is empty. Not called on cache hits (D-046).
+    15. Post-response memory operations (v0.7, D-128) — non-fatal:
         a. Extract entities from the turn (AC-2)
         b. Store entities with embeddings (AC-2)
         c. Consolidate old turns if threshold met (AC-5)
@@ -355,6 +401,8 @@ async def handle_query(event: dict[str, Any]) -> None:
                 {**response_payload, "conversation_id": str(conversation_id)},
             )
             query_duration_seconds.observe(time.monotonic() - start_time)
+            # Retrieval tracking (v0.9, D-140) — chunks were fetched before cap check
+            await _update_chunk_retrieval_stats(chunk_ids)
             return
 
     # 8. Semantic memory retrieval — v0.7, D-128, AC-3
@@ -445,7 +493,10 @@ async def handle_query(event: dict[str, Any]) -> None:
         available_tools=len(available_tools),
     )
 
-    # 14. Post-response memory operations — v0.7, D-128
+    # 14. Retrieval tracking (v0.9, D-140) — non-fatal, skip if no chunks returned
+    await _update_chunk_retrieval_stats(chunk_ids)
+
+    # 15. Post-response memory operations — v0.7, D-128
     # These run after query.response has been emitted. Non-fatal throughout.
     # a. Extract entities from the completed turn.
     # b. Store entities with embeddings in clive_state.memory_entities.

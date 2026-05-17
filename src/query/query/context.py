@@ -1,6 +1,13 @@
-"""Context window assembly for Block 8.
+"""Context assembly for Block 8 queries.
 
-D-044: dynamic allocation with priority ordering.
+Follows Block 12 Context Window Policy:
+docs/spec/Block 12 - Context Window Policy.md
+
+Policy constants defined below correspond to the tiers in that document.
+All values here are the authoritative implementation parameters.
+Changes to these constants must be reflected in the policy document.
+
+Tier structure (D-044, extended for v0.7 D-128):
   Tier 1: personality document (always present, takes what it needs)
   Tier 2: alignment rules (always present, takes what it needs)
   Tier 3: conversation history (minimum guaranteed, surplus if available)
@@ -21,18 +28,33 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-# Total token budget for LLM context
-# Default: 100k tokens (Claude claude-sonnet-4-20250514 supports 200k)
-# Reserved: ~2k for the query itself and response overhead
-TOTAL_BUDGET = 98_000
+# ── Total context budget (Block 12 §2) ───────────────────────────────────────
+# Model in production supports 200k tokens; conservative operating target is 100k.
+# QUERY_OVERHEAD_RESERVE: tokens reserved for the live user query text and
+# associated formatting overhead. These are passed to the LLM directly and are
+# not tracked by ctx.assemble() (Block 12 Invariant I-2).
+# TODO (Block 12 Gap 3 — Wave 2-B): introduce MODEL_CONTEXT_LIMIT and
+#   CONTEXT_BUDGET_TARGET constants; derive TOTAL_BUDGET from them explicitly.
+QUERY_OVERHEAD_RESERVE = 2_000   # user query text + formatting overhead reserve
+TOTAL_BUDGET = 100_000 - QUERY_OVERHEAD_RESERVE  # = 98,000 tokens
 
-# Tier 3, 3.5, and 4 minimum guarantees (tokens)
-MIN_HISTORY_TOKENS = 2_000
-MIN_MEMORY_TOKENS = 1_000   # D-128: memory entities tier (AC-4)
-MIN_RETRIEVAL_TOKENS = 4_000
+# ── Tier minimum guarantees (Block 12 §3, Invariant I-3) ─────────────────────
+MIN_HISTORY_TOKENS = 2_000     # Tier 3 floor  — conversation history
+MIN_MEMORY_TOKENS = 1_000      # Tier 3.5 floor — memory entities (D-128)
+MIN_RETRIEVAL_TOKENS = 4_000   # Tier 4 floor  — retrieved knowledge chunks
 
-# Approximate tokens per character (rough estimate; real count uses tiktoken)
+# ── Token estimation (Block 12 Gap 1) ────────────────────────────────────────
+# Approximate tokens per character used throughout this module.
+# TODO (Block 12 Gap 1 — Wave 2-B): replace len(text)//CHARS_PER_TOKEN with
+#   a proper tokenisation library call. The current approximation can under- or
+#   over-estimate by 20–30% for code, unicode, or punctuation-heavy content.
 CHARS_PER_TOKEN = 4
+
+# NOTE (Block 12 Gap 2 — Wave 2-B): the tool registry section injected by
+# llm.py (_build_tools_section) is NOT counted against TOTAL_BUDGET. As the
+# registry grows, actual tokens sent to the LLM will exceed token_estimate
+# without enforcement. Wave 2-B should either budget the tool section here
+# or enforce a named cap in _build_tools_section.
 
 
 @dataclass
@@ -97,7 +119,7 @@ def assemble(
     if memory_entities is None:
         memory_entities = []
 
-    # Fixed costs (Tiers 1 and 2 — always included in full)
+    # Fixed costs (Tiers 1 and 2 — always included in full; Block 12 §3)
     personality_tokens = _estimate_tokens(personality)
     alignment_tokens = _estimate_tokens(alignment_rules)
     fixed_cost = personality_tokens + alignment_tokens
@@ -105,7 +127,10 @@ def assemble(
     remaining = TOTAL_BUDGET - fixed_cost
     total_min = MIN_HISTORY_TOKENS + MIN_MEMORY_TOKENS + MIN_RETRIEVAL_TOKENS
     if remaining < total_min:
-        # Pathological case: personality/alignment docs are enormous
+        # Pathological case: personality/alignment docs are enormous.
+        # Budget is expanded to preserve minimum tier guarantees (Block 12 §4 Step 3).
+        # TODO (Block 12 Gap 4 — Wave 2-B): add a log.warning or metric counter
+        #   here so this path is visible when triggered. Currently silent.
         remaining = total_min
 
     # Estimate token needs for Tiers 3, 3.5, and 4
@@ -117,7 +142,7 @@ def assemble(
     memory_tokens_needed = _estimate_tokens(memory_text)
     chunks_tokens_needed = _estimate_tokens(chunks_text)
 
-    # Allocate with minimums and proportional surplus flow
+    # Allocate with minimums and proportional surplus flow (Block 12 §4 Steps 4–6)
     surplus = max(0, remaining - total_min)
 
     history_surplus = max(0, history_tokens_needed - MIN_HISTORY_TOKENS)
@@ -132,13 +157,16 @@ def assemble(
         memory_alloc = MIN_MEMORY_TOKENS + int(
             surplus * memory_surplus / total_surplus_needed
         )
+        # NOTE (Block 12 Gap 5): Tier 4 receives the residual after Tiers 3 and 3.5.
+        # This avoids rounding accumulation from integer truncation above.
+        # Intentional policy choice — confirmed in Block 12 §4 Step 6.
         chunks_alloc = remaining - history_alloc - memory_alloc
     else:
         history_alloc = MIN_HISTORY_TOKENS
         memory_alloc = MIN_MEMORY_TOKENS
         chunks_alloc = remaining - history_alloc - memory_alloc
 
-    # Truncate each tier to its allocation
+    # Truncate each tier to its allocation (Block 12 §4 Step 7, Invariant I-4)
     final_history = _truncate_history(conversation_history, history_alloc)
     final_memory = _truncate_memory_entities(memory_entities, memory_alloc)
     final_chunks = _truncate_chunks(retrieved_chunks, chunks_alloc)

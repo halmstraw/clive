@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-151
+Last decision ID: D-153
 Last updated: 2026-05-17
 
 | ID | Title | Status | Date | Blocks | File |
@@ -160,3 +160,5 @@ Last updated: 2026-05-17
 | D-149 | CLIVE v0.12 scope — Config/Admin complete + CLIVE Self-Knowledge | Accepted | 2026-05-17 | Block 8, Block 10, Block 13, Block 19, Block 23, Block 28, Block 29 | [D-149-v12-scope.md](docs/decisions/D-149-v12-scope.md) |
 | D-150 | CLIVE v0.12 acceptance criteria — ten criteria for Config/Admin + Self-Knowledge | Accepted | 2026-05-17 | Block 8, Block 10, Block 13, Block 19, Block 23, Block 28, Block 29 | [D-150-v12-acceptance-criteria.md](docs/decisions/D-150-v12-acceptance-criteria.md) |
 | D-151 | CLIVE v0.12 signed off — all ten criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 8, Block 10, Block 13, Block 19, Block 23, Block 28, Block 29 | [D-151-v12-signed-off.md](docs/decisions/D-151-v12-signed-off.md) |
+| D-152 | CLIVE v1.0 scope — Block 24 sandboxing stub + security review | Accepted | 2026-05-17 | Block 24, Block 23, Block 6, Block 7, Block 27, Block 28, Block 29 | [D-152-v10-scope.md](docs/decisions/D-152-v10-scope.md) |
+| D-153 | CLIVE v1.0 acceptance criteria — eight criteria for sandboxing stub and security review | Accepted | 2026-05-17 | Block 24, Block 23, Block 6, Block 7, Block 27, Block 28 | [D-153-v10-acceptance-criteria.md](docs/decisions/D-153-v10-acceptance-criteria.md) |

@@ -33,6 +33,9 @@ v0.8 additions:
   /tool_disable <name>    — disable a tool (D-006 confirmation gate)
   /tool_enable <name>     — enable a tool (D-006 confirmation gate)
   /help                   — list available commands (D-119)
+
+v0.10 additions:
+  /whoami                 — show caller's user profile and zone access (D-144)
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ from dateutil import parser as dateutil_parser
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
+from . import auth
 from .auth import is_authenticated, make_auth_metadata
 from .db import get_pool
 from .minio_client import upload_document
@@ -1900,6 +1904,45 @@ async def deliver_tool_error(payload: dict[str, Any], chat_id: int) -> None:  # 
 
 
 # ---------------------------------------------------------------------------
+# v0.10 — /whoami command (D-144)
+# ---------------------------------------------------------------------------
+
+async def whoami_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
+    """Return the caller's user profile from clive_state.users.
+
+    D-144: /whoami returns telegram_chat_id, role, zone_access.
+    D-001: gated by is_authenticated — owner-only at v0.1.
+    """
+    if not update.message or not update.effective_chat:
+        return
+
+    chat_id = update.effective_chat.id
+    if not is_authenticated(chat_id):
+        return
+
+    telegram_commands_total.labels(command="other").inc()
+
+    profile = await auth.get_user_profile(chat_id)
+
+    if profile is None:
+        text = (
+            "You are authenticated but not yet registered in the users table.\n"
+            "This resolves on next service restart."
+        )
+    else:
+        zones = ", ".join(profile["zone_access"]) or "none"
+        text = (
+            f"*User Profile*\n"
+            f"Chat ID: `{profile['telegram_chat_id']}`\n"
+            f"Role: `{profile['role']}`\n"
+            f"Zone access: `{zones}`\n"
+            f"Member since: {profile['created_at'][:10]}"
+        )
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+# ---------------------------------------------------------------------------
 # D-119 — /help command
 # ---------------------------------------------------------------------------
 
@@ -1918,7 +1961,8 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "Commands\n\n"
         "/start — reset conversation\n"
         "/list — list ingested documents\n"
-        "/status — system status\n\n"
+        "/status — system status\n"
+        "/whoami — show your user profile and zone access\n\n"
         "/ingest — ingest file (send file with /ingest as caption)\n"
         "/ingest_confirm — confirm pending ingest (mobile)\n"
         "/delete <filename> — delete a document\n\n"

@@ -30,6 +30,11 @@ v0.8 additions:
   /help           — list available commands (D-119)
   /tool-updated HTTP endpoint — admin.tool_updated push from Block 13
   /tool-error HTTP endpoint   — admin.tool_error push from Block 13
+
+v0.10 additions:
+  DB-backed auth (D-143/D-144) — clive_state.users populated at startup;
+  auth cache refreshed every 60 s; owner upserted from env var on start.
+  /whoami — show caller's user profile and zone access (D-144)
 """
 
 from __future__ import annotations
@@ -45,6 +50,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from .auth import get_owner_chat_id
+from . import auth
 from .bot import (
     deliver_action_confirmation,
     deliver_action_outcome,
@@ -74,6 +80,7 @@ from .bot import (
     handle_tool_enable,
     handle_tools,
     set_app,
+    whoami_command,
 )
 from . import db
 
@@ -205,10 +212,19 @@ async def handle_metrics(request: web.Request) -> web.Response:  # noqa: ARG001
 async def main() -> None:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
 
-    log.info("telegram_surface_starting", block=23)
+    log.info("telegram_surface_starting", block=23, auth="db_backed_v0.10")
 
     # Initialise DB pool for D-079 system document activation and Block 18 feedback
     await db.init_pool()
+
+    # v0.10 — DB-backed authentication (D-143/D-144)
+    # Pool → owner upsert → cache prime → background refresh loop
+    await auth.init_pool()
+    await auth.register_owner_if_absent()
+    await auth.refresh_auth_cache()
+    _refresh_task = asyncio.create_task(auth.auth_cache_refresh_loop())
+    _background_tasks.add(_refresh_task)
+    _refresh_task.add_done_callback(_background_tasks.discard)
 
     # Build Telegram application
     application = Application.builder().token(token).build()
@@ -235,6 +251,9 @@ async def main() -> None:
 
     # D-119 — help command
     application.add_handler(CommandHandler("help", handle_help))
+
+    # v0.10 — /whoami: show caller's user profile (D-144)
+    application.add_handler(CommandHandler("whoami", whoami_command))
 
     # v0.4 — mobile ingest and new commands (D-114)
     application.add_handler(CommandHandler("ingest_confirm", handle_ingest_confirm))

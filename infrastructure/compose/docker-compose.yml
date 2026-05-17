@@ -339,6 +339,40 @@ services:
     networks:
       - clive-internal
 
+  # ---------------------------------------------------------------------------
+  # Block 24 — Sandboxing stub (v1.0, D-152)
+  # Gated behind the "experimental" Compose profile. NOT started by default.
+  #
+  # To start: docker compose --profile experimental up sandbox
+  # Do NOT activate in production until Block 21 is formally unblocked (D-042).
+  #
+  # This service definition exists so that:
+  #   (a) Block 21 (Evolution Engine) can be activated post-v1.0 without an
+  #       infrastructure sprint to add a new service.
+  #   (b) The sandbox image reference and resource limits are version-controlled.
+  #   (c) IaC-readiness is verified in Compose dry-run CI.
+  #
+  # When Block 21 is activated, replace the placeholder image with the
+  # concrete sandbox runner image and remove this comment block.
+  # ---------------------------------------------------------------------------
+
+  sandbox:
+    image: ghcr.io/halmstraw/clive-sandbox:${SANDBOX_IMAGE_TAG:-stub}
+    container_name: clive-sandbox
+    restart: "no"
+    profiles:
+      - experimental
+    env_file: /etc/clive/secrets.env
+    environment:
+      - CLIVE_ENV=experimental
+      - SANDBOXING_ACTIVE=false
+      - ORCHESTRATOR_URL=http://orchestrator:8080
+    networks:
+      - clive-internal
+    mem_limit: 512m
+    # No depends_on — sandbox starts independently when profile is activated.
+    # Block 13 coordinates via event bridge (D-024) not service dependency.
+
 
 volumes:
   postgres_data:

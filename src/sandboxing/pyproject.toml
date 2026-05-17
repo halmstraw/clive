@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clive-sandboxing"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+# No production dependencies — this is a stub framework only.
+# Concrete runner dependencies (docker SDK etc.) added when Block 21 activated.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -113,31 +113,31 @@ jobs:
           TEST_DB_URL: "postgresql://postgres:testpassword@localhost:5432/clive_test"
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests/ -v --cov=orchestrator --cov-report=xml:coverage.xml
+          python -m pytest tests/ -v --cov=orchestrator --cov-report=xml:coverage.xml --cov-fail-under=90
         working-directory: src/orchestrator
 
       - name: Run query service unit tests
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests/ -v --cov=query --cov-report=xml:coverage.xml
+          python -m pytest tests/ -v --cov=query --cov-report=xml:coverage.xml --cov-fail-under=90
         working-directory: src/query
 
       - name: Run telegram rendering tests
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests/ -v --cov=clive_telegram --cov-report=xml:coverage.xml
+          python -m pytest tests/ -v --cov=clive_telegram --cov-report=xml:coverage.xml --cov-fail-under=90
         working-directory: src/telegram
 
       - name: Run processing service unit tests
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests/ -v --cov=processing --cov-report=xml:coverage.xml
+          python -m pytest tests/ -v --cov=processing --cov-report=xml:coverage.xml --cov-fail-under=90
         working-directory: src/processing
 
       - name: Run dashboard service tests (v0.11, D-147)
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests/ -v --cov=clive_dashboard --cov-report=xml:coverage.xml
+          python -m pytest tests/ -v --cov=clive_dashboard --cov-report=xml:coverage.xml --cov-fail-under=90
         working-directory: src/dashboard
 
       - name: SonarCloud scan

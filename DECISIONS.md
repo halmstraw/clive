@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-154
+Last decision ID: D-155
 Last updated: 2026-05-17
 
 | ID | Title | Status | Date | Blocks | File |
@@ -163,3 +163,4 @@ Last updated: 2026-05-17
 | D-152 | CLIVE v1.0 scope — Block 24 sandboxing stub + security review | Accepted | 2026-05-17 | Block 24, Block 23, Block 6, Block 7, Block 27, Block 28, Block 29 | [D-152-v10-scope.md](docs/decisions/D-152-v10-scope.md) |
 | D-153 | CLIVE v1.0 acceptance criteria — eight criteria for sandboxing stub and security review | Accepted | 2026-05-17 | Block 24, Block 23, Block 6, Block 7, Block 27, Block 28 | [D-153-v10-acceptance-criteria.md](docs/decisions/D-153-v10-acceptance-criteria.md) |
 | D-154 | CLIVE v1.0 signed off — all eight criteria met 17 May 2026 | Accepted | 2026-05-17 | Block 24, all blocks | [D-154-v10-signed-off.md](docs/decisions/D-154-v10-signed-off.md) |
+| D-155 | Test coverage target of 90% for all CLIVE Python services | Accepted | 2026-05-17 | Block 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 23, 24, Block 2/3/4/5, Block 28 | [D-155-test-coverage-target-90.md](docs/decisions/D-155-test-coverage-target-90.md) |

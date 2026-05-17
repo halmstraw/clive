@@ -2,8 +2,6 @@
 - name: Write secrets file
   ansible.builtin.copy:
     dest: /etc/clive/secrets.env
-    owner: clive
-    group: clive
     mode: "0600"
     content: |
       TELEGRAM_BOT_TOKEN={{ telegram_bot_token }}

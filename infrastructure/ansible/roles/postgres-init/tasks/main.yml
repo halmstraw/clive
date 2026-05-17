@@ -1,4 +1,7 @@
 ---
+# All tasks run as the clive user (day-2 play, become: false).
+# become_user: clive is omitted — we are already clive.
+
 - name: Wait for PostgreSQL container to be healthy
   ansible.builtin.command:
     cmd: docker compose -f /home/clive/compose/docker-compose.yml exec -T postgres pg_isready -U postgres
@@ -6,23 +9,19 @@
   until: pg_ready.rc == 0
   retries: 10
   delay: 5
-  become: true
-  become_user: clive
   changed_when: false
 
 - name: Create SQL staging directory
   ansible.builtin.file:
     path: /tmp/clive-sql
     state: directory
-    owner: clive
     mode: "0750"
 
 - name: Copy SQL init files
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../sql/init/{{ item }}"
     dest: "/tmp/clive-sql/"
-    owner: clive
-    mode: "0644" # NOSONAR — world-read required: postgres container (uid 999) reads init scripts via bind mount
+    mode: "0644" # NOSONAR — world-read required: postgres container reads init scripts
   loop:
     - 01_extensions.sql
     - 02_schemas.sql
@@ -53,8 +52,6 @@
     - 10_v07_memory_tables.sql
     - 10_v07_actions_tables.sql
     - 11_v07_pending_actions_metadata.sql
-  become: true
-  become_user: clive
   changed_when: true
 
 - name: Set clive_audit_writer password
@@ -74,8 +71,6 @@
       - clive
       - -c
       - "ALTER ROLE clive_audit_writer PASSWORD '{{ audit_writer_password }}'"
-  become: true
-  become_user: clive
   changed_when: true
   no_log: true
 
@@ -96,7 +91,5 @@
       - clive
       - -c
       - "ALTER ROLE clive_app PASSWORD '{{ app_db_password }}'"
-  become: true
-  become_user: clive
   changed_when: true
   no_log: true

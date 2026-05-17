@@ -31,7 +31,7 @@ from .events.schema import CLIVEEvent
 log = structlog.get_logger()
 
 POLL_INTERVAL = 30  # seconds
-_TELEGRAM_DEFAULT_URL = "http://telegram:8082"
+_TELEGRAM_DEFAULT_URL = "http://telegram:8082"  # NOSONAR — Docker-internal, no TLS
 
 _pool: asyncpg.Pool | None = None
 

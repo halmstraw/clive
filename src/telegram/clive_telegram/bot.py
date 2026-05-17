@@ -69,7 +69,7 @@ _SEARCH_RE = re.compile(
 )
 
 _REMINDER_RE = re.compile(
-    r"^remind\s+me\s+(?:about|to)\s+(.+?)\s+at\s+(.+)$",
+    r"^remind\s+me\s+(?:about|to)\s+((?:\S+\s+)*?\S+)\s+at\s+(.+)$",
     re.IGNORECASE,
 )
 
@@ -113,7 +113,7 @@ def detect_reminder_intent(text: str) -> tuple[str, datetime] | None:
 
 log = structlog.get_logger()
 
-ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
+ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")  # NOSONAR — Docker-internal, no TLS
 
 # Idempotency: track rendered event_ids to avoid duplicate renders (D-025)
 _rendered_event_ids: set[str] = set()

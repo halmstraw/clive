@@ -37,8 +37,8 @@ from .store import write_chunks
 log = structlog.get_logger()
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB — D-098
-ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
+ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")  # NOSONAR — Docker-internal, no TLS
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")  # NOSONAR — Docker-internal, no TLS
 MINIO_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "clive-raw-store")
 EMBED_BATCH_SIZE = 32
 _EVENT_INGEST_REJECTED = "ingest.rejected"

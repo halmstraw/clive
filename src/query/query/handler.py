@@ -82,7 +82,7 @@ ACTION_VERBS = {
     "remind", "set", "add", "remove", "cancel", "upload",
 }
 
-ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
+ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")  # NOSONAR — Docker-internal, no TLS
 _EVENT_QUERY_RESPONSE = "query.response"
 
 

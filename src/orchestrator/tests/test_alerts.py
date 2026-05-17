@@ -53,7 +53,7 @@ def _grafana_payload(alerts: list[dict] | None = None, **overrides) -> dict:
         "groupLabels": {},
         "commonLabels": {},
         "commonAnnotations": {},
-        "externalURL": "http://grafana:3000",
+        "externalURL": "http://grafana:3000",  # NOSONAR — Docker-internal, no TLS
         "version": "1",
         "groupKey": "group-key-1",
         "truncatedAlerts": 0,
@@ -79,7 +79,7 @@ def _grafana_alert(
         "annotations": {"summary": summary, "description": description},
         "startsAt": started_at,
         "endsAt": "0001-01-01T00:00:00Z",
-        "generatorURL": "http://prometheus:9090/graph",
+        "generatorURL": "http://prometheus:9090/graph",  # NOSONAR — Docker-internal, no TLS
         "fingerprint": fingerprint,
     }
 

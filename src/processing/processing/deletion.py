@@ -54,7 +54,7 @@ def _get_pool() -> asyncpg.Pool:
 
 
 def _get_s3_client() -> Any:
-    endpoint = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
+    endpoint = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")  # NOSONAR — Docker-internal, no TLS
     return boto3.client(
         "s3",
         endpoint_url=endpoint,

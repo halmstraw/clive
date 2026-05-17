@@ -63,7 +63,7 @@ class TestSearchHandlerConfirmed:
             patch("orchestrator.search_handler.os.environ.get", side_effect=lambda k, d="": {
                 "SEARCH_API_KEY": "test-key",
                 "SEARCH_API_PROVIDER": "brave",
-                "TELEGRAM_SERVICE_URL": "http://telegram:8082",
+                "TELEGRAM_SERVICE_URL": "http://telegram:8082",  # NOSONAR — Docker-internal, no TLS
             }.get(k, d)),
             patch("orchestrator.search_handler._brave_search", new_callable=AsyncMock, return_value=brave_results),
             patch("httpx.AsyncClient") as mock_client_cls,
@@ -87,7 +87,7 @@ class TestSearchHandlerConfirmed:
         with (
             patch("orchestrator.search_handler.os.environ.get", side_effect=lambda k, d="": {
                 "SEARCH_API_KEY": "test-key",
-                "TELEGRAM_SERVICE_URL": "http://telegram:8082",
+                "TELEGRAM_SERVICE_URL": "http://telegram:8082",  # NOSONAR — Docker-internal, no TLS
             }.get(k, d)),
             patch("httpx.AsyncClient") as mock_client_cls,
         ):
@@ -128,7 +128,7 @@ class TestSearchHandlerConfirmed:
             patch("orchestrator.search_handler.os.environ.get", side_effect=lambda k, d="": {
                 "SEARCH_API_KEY": "test-key",
                 "SEARCH_API_PROVIDER": "brave",
-                "TELEGRAM_SERVICE_URL": "http://telegram:8082",
+                "TELEGRAM_SERVICE_URL": "http://telegram:8082",  # NOSONAR — Docker-internal, no TLS
             }.get(k, d)),
             patch(
                 "orchestrator.search_handler._brave_search",
@@ -291,7 +291,7 @@ class TestReminderPoll:
             mock_client_cls.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = mock_post
 
-            await _fire_due_reminders("http://telegram:8082")
+            await _fire_due_reminders("http://telegram:8082")  # NOSONAR — Docker-internal, no TLS
 
         # At least one push to /response was made
         assert any("/response" in url for url in push_calls)
@@ -315,7 +315,7 @@ class TestReminderPoll:
             mock_client_cls.return_value.__aenter__.return_value = mock_client
             mock_client.post.return_value = MagicMock(raise_for_status=MagicMock())
 
-            await _fire_due_reminders("http://telegram:8082")
+            await _fire_due_reminders("http://telegram:8082")  # NOSONAR — Docker-internal, no TLS
 
         # The UPDATE SQL should reference status = 'fired'
         fetch_sql = mock_conn.fetch.call_args.args[0]

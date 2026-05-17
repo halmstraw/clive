@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
-ORCHESTRATOR_URL = "http://orchestrator:8080"
+ORCHESTRATOR_URL = "http://orchestrator:8080"  # NOSONAR — Docker-internal, no TLS
 
 
 def _make_payload(

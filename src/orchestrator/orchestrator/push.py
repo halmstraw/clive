@@ -32,9 +32,9 @@ from .events.schema import CLIVEEvent
 
 log = structlog.get_logger()
 
-TELEGRAM_URL = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
-QUERY_SERVICE_URL = os.environ.get("QUERY_SERVICE_URL", "http://query:8081")
-PROCESSING_SERVICE_URL = os.environ.get("PROCESSING_SERVICE_URL", "http://processing:8083")
+TELEGRAM_URL = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")  # NOSONAR — Docker-internal, no TLS
+QUERY_SERVICE_URL = os.environ.get("QUERY_SERVICE_URL", "http://query:8081")  # NOSONAR — Docker-internal, no TLS
+PROCESSING_SERVICE_URL = os.environ.get("PROCESSING_SERVICE_URL", "http://processing:8083")  # NOSONAR — Docker-internal, no TLS
 
 
 async def push_query_to_block8(event: CLIVEEvent) -> None:

@@ -29,7 +29,7 @@ log = structlog.get_logger()
 
 _background_tasks: set[asyncio.Task] = set()
 
-ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")
+ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8080")  # NOSONAR — Docker-internal, no TLS
 
 
 async def handle_ingest(request: web.Request) -> web.Response:

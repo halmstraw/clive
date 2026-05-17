@@ -80,7 +80,7 @@ async def handle_confirmed(event: CLIVEEvent) -> None:
                 lines.append(f"   {url}")
         text = "\n".join(lines)
 
-    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
+    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")  # NOSONAR — Docker-internal, no TLS
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{telegram_url}/response",
@@ -158,7 +158,7 @@ async def _serpapi_search(query: str, api_key: str) -> list[dict[str, Any]]:
 
 async def _push_error(message: str) -> None:
     """Push an error message to the owner via Block 23."""
-    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")
+    telegram_url = os.environ.get("TELEGRAM_SERVICE_URL", "http://telegram:8082")  # NOSONAR — Docker-internal, no TLS
     try:
         async with httpx.AsyncClient() as client:
             await client.post(

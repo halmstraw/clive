@@ -97,7 +97,7 @@ async def _push_worker_notification(message_text: str) -> None:
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{os.environ.get('TELEGRAM_SERVICE_URL', 'http://telegram:8082')}/alert",
+            f"{os.environ.get('TELEGRAM_SERVICE_URL', 'http://telegram:8082')}/alert",  # NOSONAR — Docker-internal, no TLS
             json={
                 "event_id": str(uuid.uuid4()),
                 "severity": "info",

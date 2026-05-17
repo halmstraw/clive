@@ -100,22 +100,38 @@ jobs:
               "runner_token":                 "RUNNER_TOKEN",
           }
 
+          # Required vars — the clive-secrets template will fail if any are missing.
+          # Optional vars have defaults elsewhere (runner_token, backup_s3_*, owner_ip).
+          required = {
+              "telegram_bot_token", "telegram_owner_chat_id",
+              "anthropic_api_key", "openai_api_key",
+              "postgres_password", "app_db_password", "audit_writer_password",
+              "minio_root_user", "minio_root_password",
+              "search_api_key", "dashboard_secret",
+              "grafana_cloud_prometheus_url", "grafana_cloud_prometheus_user",
+              "grafana_cloud_loki_url", "grafana_cloud_loki_user", "grafana_cloud_api_key",
+          }
+
           vars = {
               ansible_key: os.environ[env_key]
               for ansible_key, env_key in mapping.items()
               if os.environ.get(env_key)
           }
 
+          missing_required = sorted(required - set(vars))
+          if missing_required:
+              print("::error::The following GitHub Secrets are missing or empty.")
+              print("Add them at: Settings -> Secrets and variables -> Actions")
+              for k in missing_required:
+                  env_name = mapping[k]
+                  print(f"  Missing: {env_name}  (ansible var: {k})")
+              import sys; sys.exit(1)
+
           path = "/tmp/clive_vars.json"
           with open(path, "w") as f:
               json.dump(vars, f)
           os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
-
-          populated = [k for k, v in mapping.items() if os.environ.get(v)]
-          missing   = [k for k, v in mapping.items() if not os.environ.get(v) and v != "RUNNER_TOKEN"]
-          print(f"Vars file written: {len(populated)} populated, {len(missing)} empty")
-          if missing:
-              print(f"Missing (will use role defaults if any): {missing}")
+          print(f"Vars file written: {len(vars)} vars populated.")
           EOF
 
       - name: Run Ansible playbook (day-2 operations only)

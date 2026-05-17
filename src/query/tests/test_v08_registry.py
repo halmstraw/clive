@@ -111,7 +111,7 @@ async def test_empty_registry_action_intent_returns_not_available():
 
     emitted_events: list[dict] = []
 
-    async def fake_emit(event_type: str, payload: dict) -> None:
+    async def fake_emit(event_type: str, payload: dict) -> None:  # NOSONAR
         emitted_events.append({"event_type": event_type, **payload})
 
     with (
@@ -147,7 +147,7 @@ async def test_matched_tool_emits_action_requested_with_tool_name():
 
     emitted_events: list[dict] = []
 
-    async def fake_emit(event_type: str, payload: dict) -> None:
+    async def fake_emit(event_type: str, payload: dict) -> None:  # NOSONAR
         emitted_events.append({"event_type": event_type, **payload})
 
     with (
@@ -186,7 +186,7 @@ async def test_unmatched_verb_with_registry_tools_returns_not_available():
 
     emitted_events: list[dict] = []
 
-    async def fake_emit(event_type: str, payload: dict) -> None:
+    async def fake_emit(event_type: str, payload: dict) -> None:  # NOSONAR
         emitted_events.append({"event_type": event_type, **payload})
 
     tools = [_REMINDER_TOOL, _WEB_SEARCH_TOOL]

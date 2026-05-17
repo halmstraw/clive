@@ -11,10 +11,10 @@ VALUES
     (
         'web_search',
         'Web Search',
-        '1.0.0',
+        '1.0.0', -- NOSONAR
         'Searches the web via DuckDuckGo and returns summarised results',
         ARRAY['read:web'],
-        'healthy',
+        'healthy', -- NOSONAR
         TRUE,
         FALSE
     )
@@ -27,10 +27,10 @@ VALUES
     (
         'reminder',
         'Reminder',
-        '1.0.0',
+        '1.0.0', -- NOSONAR
         'Sets time-based reminders that deliver via Telegram',
         ARRAY['write:reminders', 'write:telegram'],
-        'healthy',
+        'healthy', -- NOSONAR
         TRUE,
         FALSE
     )
@@ -43,10 +43,10 @@ VALUES
     (
         'delete_document',
         'Document Deletion',
-        '1.0.0',
+        '1.0.0', -- NOSONAR
         'Permanently removes a document from Block 16 storage',
         ARRAY['write:storage'],
-        'healthy',
+        'healthy', -- NOSONAR
         TRUE,
         FALSE
     )

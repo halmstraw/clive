@@ -1600,6 +1600,20 @@ def _pack_tool_messages(header: str, entries: list[str]) -> list[str]:
 # v0.8 — Tool management command handlers (D-137, D-006)
 # ---------------------------------------------------------------------------
 
+_TOOL_REGISTRY_UNAVAILABLE = "Tool registry is unavailable. Try again shortly."
+
+
+async def _reply_tool_already_enabled(message, tool_name: str, deprecated: bool, deprecation_note: str | None) -> None:
+    if deprecated:
+        note = deprecation_note or ""
+        note_suffix = f" {note}" if note else ""
+        await message.reply_text(
+            f"{tool_name} is already enabled.\n"
+            f"Note: this tool is deprecated.{note_suffix}"
+        )
+    else:
+        await message.reply_text(f"{tool_name} is already enabled.")
+
 async def handle_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG002
     """/tools — list all registered tools (v0.8, D-137).
 
@@ -1629,9 +1643,7 @@ async def handle_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
     except Exception as exc:
         log.error("tool_registry_fetch_failed", chat_id=chat_id, error=str(exc))
-        await update.message.reply_text(
-            "Tool registry is unavailable. Try again shortly."
-        )
+        await update.message.reply_text(_TOOL_REGISTRY_UNAVAILABLE)
         return
 
     if not rows:
@@ -1693,9 +1705,7 @@ async def handle_tool_disable(update: Update, context: ContextTypes.DEFAULT_TYPE
             tool_name=tool_name,
             error=str(exc),
         )
-        await update.message.reply_text(
-            "Tool registry is unavailable. Try again shortly."
-        )
+        await update.message.reply_text(_TOOL_REGISTRY_UNAVAILABLE)
         return
 
     if row is None:
@@ -1779,9 +1789,7 @@ async def handle_tool_enable(update: Update, context: ContextTypes.DEFAULT_TYPE)
             tool_name=tool_name,
             error=str(exc),
         )
-        await update.message.reply_text(
-            "Tool registry is unavailable. Try again shortly."
-        )
+        await update.message.reply_text(_TOOL_REGISTRY_UNAVAILABLE)
         return
 
     if row is None:
@@ -1792,16 +1800,9 @@ async def handle_tool_enable(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if row["enabled"]:
-        # Already enabled — surface deprecation note if present (UX spec 3.4)
-        if row["deprecated"]:
-            note = row["deprecation_note"] or ""
-            note_suffix = f" {note}" if note else ""
-            await update.message.reply_text(
-                f"{tool_name} is already enabled.\n"
-                f"Note: this tool is deprecated.{note_suffix}"
-            )
-        else:
-            await update.message.reply_text(f"{tool_name} is already enabled.")
+        await _reply_tool_already_enabled(
+            update.message, tool_name, bool(row["deprecated"]), row["deprecation_note"]
+        )
         return
 
     # Tool exists and is disabled — require explicit confirmation (D-006)
@@ -1886,14 +1887,14 @@ async def deliver_tool_updated(payload: dict[str, Any], chat_id: int) -> None:
         log.info("tool_updated_delivered", chat_id=chat_id, tool_name=tool_name, op=op)
 
 
-async def deliver_tool_error(payload: dict[str, Any], chat_id: int) -> None:  # noqa: ARG001
+async def deliver_tool_error(payload: dict[str, Any], chat_id: int) -> None:  # noqa: ARG001  # NOSONAR
     """Receive admin.tool_error from Block 13 and notify owner (v0.8)."""
     _confirmed_tool_ops.pop(chat_id, None)
 
     if _app:
         await _app.bot.send_message(
             chat_id=chat_id,
-            text="Tool registry is unavailable. Try again shortly.",
+            text=_TOOL_REGISTRY_UNAVAILABLE,
         )
         log.warning("tool_error_delivered", chat_id=chat_id)
 

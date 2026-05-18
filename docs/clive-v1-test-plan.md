@@ -76,14 +76,15 @@ Required healthy containers:
 
 ### 1.2 — Service health endpoints reachable
 
-From the VM, check each internal service health:
+From the VM, check each internal service health. Services do not expose ports to
+the host — curl must run inside the container network via `docker exec`:
 
 ```bash
-curl -f http://localhost:8080/health   # orchestrator
-curl -f http://localhost:8081/health   # query
-curl -f http://localhost:8082/health   # telegram
-curl -f http://localhost:8083/health   # processing
-curl -f http://localhost:8084/health   # dashboard
+docker exec clive-orchestrator curl -sf http://localhost:8080/health
+docker exec clive-query        curl -sf http://localhost:8081/health
+docker exec clive-telegram     curl -sf http://localhost:8082/health
+docker exec clive-processing   curl -sf http://localhost:8083/health
+docker exec clive-dashboard    curl -sf http://localhost:8084/health
 ```
 
 **Expected:** Each returns HTTP 200 with a JSON body containing `"status": "ok"`.

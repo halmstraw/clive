@@ -1,0 +1,39 @@
+CLIVE Knowledge Base — Deletion Test Document
+==============================================
+
+This document is used to verify that Block 16 (Storage) correctly handles
+document deletion, including removal of all associated chunk records and
+embeddings from pgvector.
+
+Topic: The colour blue
+
+Blue is a colour whose perception is evoked by light with a dominant wavelength
+of roughly 450–495 nanometres. It is one of the three primary colours in the
+RYB colour model and one of the additive primary colours in the RGB model.
+
+A few facts included so retrieval can be verified BEFORE deletion:
+
+- The sky appears blue because of Rayleigh scattering: shorter wavelengths of
+  sunlight are scattered more than longer ones by gas molecules in the atmosphere.
+
+- The ocean appears blue partly for the same reason and partly because water
+  itself absorbs red light more strongly than blue.
+
+- Blue pigments were historically rare and expensive. Ultramarine, derived from
+  lapis lazuli mined in Afghanistan, was once more valuable than gold by weight.
+
+- Ancient languages often lacked a word for blue. The Iliad, for example, never
+  uses a term that maps cleanly to the modern concept of blue.
+
+- Blue is the most popular favourite colour in surveys conducted across many
+  cultures, typically chosen by 40–45% of respondents.
+
+Deletion verification steps:
+1. Ingest this document and confirm chunks appear in Block 16 storage.
+2. Confirm retrieval works (ask CLIVE a question answered by this document).
+3. Delete the document via the admin interface.
+4. Confirm chunks and embeddings are gone from storage.
+5. Confirm retrieval no longer surfaces content from this document.
+
+Document ID: test-002
+Created for: CLIVE deletion pipeline test (Block 16)

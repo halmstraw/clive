@@ -7,7 +7,7 @@ ENV UV_SYSTEM_PYTHON=1
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project --no-build
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY seed_system_documents.py .
 

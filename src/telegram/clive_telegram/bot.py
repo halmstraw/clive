@@ -1363,8 +1363,11 @@ async def handle_ingest_confirm(update: Update, context: ContextTypes.DEFAULT_TY
 
     telegram_commands_total.labels(command="ingest").inc()
 
+    log.info("ingest_confirm_command_received", chat_id=chat_id)
+
     pending = _pending_ingests.pop(chat_id, None)
     if not pending:
+        log.warning("ingest_confirm_no_pending_state", chat_id=chat_id)
         await update.message.reply_text(
             "No pending ingest. Send a file first, then /ingest_confirm."
         )

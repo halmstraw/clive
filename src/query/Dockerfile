@@ -11,10 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project # NOSONAR
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY query/ ./query/
-RUN uv sync --frozen --no-dev # NOSONAR
+RUN uv sync --frozen --no-dev
 
 RUN useradd -m -u 1000 clive
 USER clive

@@ -1,0 +1,49 @@
+CLIVE Knowledge Base — Test Document
+=====================================
+
+This document is used to verify the Block 14/15/16 ingestion and storage pipeline.
+
+Topic: Hummingbirds
+
+Hummingbirds are the smallest birds in the world, belonging to the family Trochilidae.
+There are over 360 known species, found exclusively in the Americas, ranging from
+Alaska to Tierra del Fuego.
+
+Key facts:
+
+- The bee hummingbird (Mellisuga helenae) of Cuba is the world's smallest bird,
+  weighing roughly 1.6 grams and measuring about 5 cm in length.
+
+- Hummingbirds can beat their wings between 10 and 80 times per second depending
+  on species, producing the distinctive humming sound that gives them their name.
+
+- Their hearts beat at up to 1,260 beats per minute during flight, dropping to
+  around 50–180 beats per minute during torpor (a sleep-like state used to conserve
+  energy overnight).
+
+- Hummingbirds are the only birds capable of sustained hovering. They achieve this
+  by rotating their wings in a figure-eight pattern, generating lift on both the
+  forward and backward stroke.
+
+- A hummingbird's brain makes up approximately 4.2% of its body weight — the largest
+  brain-to-body ratio of any bird. This supports their exceptional spatial memory,
+  allowing them to remember every flower they have visited and how long each takes
+  to refill with nectar.
+
+- They feed primarily on nectar, supplemented by small insects and spiders for
+  protein. A hummingbird may visit 1,000–2,000 flowers per day.
+
+- Ruby-throated hummingbirds (Archilochus colubris) migrate non-stop across the
+  Gulf of Mexico — approximately 800 km — on a single tank of fat reserves.
+
+- Hummingbirds cannot walk or hop; their feet are used only for perching.
+
+- Lifespan: most species live 3–5 years in the wild; the record is over 12 years
+  for a broad-tailed hummingbird banded in Colorado.
+
+Retrieval test prompt: "What percentage of a hummingbird's body weight is its brain?"
+Expected answer: approximately 4.2%.
+
+Document ID: test-001
+Created for: CLIVE ingestion pipeline test (Blocks 14, 15, 16)
+Size target: ~1 KB

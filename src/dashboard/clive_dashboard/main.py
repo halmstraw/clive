@@ -61,6 +61,7 @@ async def handle_health(request: web.Request) -> web.Response:  # noqa: ARG001
 
 async def handle_index(request: web.Request) -> web.Response:  # noqa: ARG001
     """GET / — serve the dashboard HTML."""
+    await asyncio.sleep(0)
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         return web.Response(text="Dashboard UI not found", status=404)

@@ -363,7 +363,7 @@ async def scheduler_loop() -> None:
             await asyncio.sleep(SCHEDULER_TICK_SECONDS)
         except asyncio.CancelledError:
             log.info("scheduler_cancelled")
-            return
+            raise
 
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for config in configs:

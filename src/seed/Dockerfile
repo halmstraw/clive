@@ -6,14 +6,10 @@ ENV UV_SYSTEM_PYTHON=1
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+COPY pyproject.toml uv.lock seed_system_documents.py ./
+RUN uv sync --frozen --no-dev \
+    && useradd -m -u 1000 clive
 
-COPY seed_system_documents.py .
-RUN uv sync --frozen --no-dev
-
-# Non-root user
-RUN useradd -m -u 1000 clive
 USER clive
 
 CMD ["python", "seed_system_documents.py"]

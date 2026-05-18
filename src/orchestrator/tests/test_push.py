@@ -318,27 +318,29 @@ class TestPushCostCapNotification:
 
 class TestPushAdminToolResult:
     @pytest.mark.asyncio
-    async def test_tool_updated_sends_info_alert(self):
-        from orchestrator.push import push_admin_tool_result_to_surface
+    async def test_tool_updated_pushes_to_tool_updated_endpoint(self):
+        from orchestrator.push import TOOL_UPDATED_ENDPOINT, push_admin_tool_result_to_surface
 
         event = _make_event("admin.tool_updated", {"tool_name": "web_search", "action": "disabled"})
         mock_broadcast = AsyncMock()
         with patch("orchestrator.push.egress.push_to_all_surfaces", mock_broadcast):
             await push_admin_tool_result_to_surface(event)
 
-        call_data = mock_broadcast.call_args[0][1]
-        assert call_data["severity"] == "info"
-        assert "web_search" in call_data["body"]
+        endpoint, call_data = mock_broadcast.call_args[0]
+        assert endpoint == TOOL_UPDATED_ENDPOINT
+        assert call_data["tool_name"] == "web_search"
+        assert call_data["action"] == "disabled"
 
     @pytest.mark.asyncio
-    async def test_tool_error_sends_warn_alert(self):
-        from orchestrator.push import push_admin_tool_result_to_surface
+    async def test_tool_error_pushes_to_tool_error_endpoint(self):
+        from orchestrator.push import TOOL_ERROR_ENDPOINT, push_admin_tool_result_to_surface
 
         event = _make_event("admin.tool_error", {"tool_name": "web_search", "reason": "not found"})
         mock_broadcast = AsyncMock()
         with patch("orchestrator.push.egress.push_to_all_surfaces", mock_broadcast):
             await push_admin_tool_result_to_surface(event)
 
-        call_data = mock_broadcast.call_args[0][1]
-        assert call_data["severity"] == "warn"
-        assert "not found" in call_data["body"]
+        endpoint, call_data = mock_broadcast.call_args[0]
+        assert endpoint == TOOL_ERROR_ENDPOINT
+        assert call_data["tool_name"] == "web_search"
+        assert call_data["reason"] == "not found"

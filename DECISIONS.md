@@ -4,7 +4,7 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-158
+Last decision ID: D-159
 Last updated: 2026-05-18
 
 | ID | Title | Status | Date | Blocks | File |
@@ -167,3 +167,4 @@ Last updated: 2026-05-18
 | D-156 | Ansible vault replaced by GitHub Secrets as source of truth for Ansible variables | Accepted | 2026-05-17 | Block 27, Block 28, Block 29 | [D-156-ansible-vault-replaced-by-github-secrets.md](docs/decisions/D-156-ansible-vault-replaced-by-github-secrets.md) |
 | D-157 | Ansible playbook split into initial-setup and day-2 tagged plays | Accepted | 2026-05-17 | Block 27, Block 28 | [D-157-ansible-playbook-split-initial-setup-day2.md](docs/decisions/D-157-ansible-playbook-split-initial-setup-day2.md) |
 | D-158 | Sonar Quality Gate enforced via branch protection on main | Accepted | 2026-05-18 | Block 28, Block 27 | [D-158-sonar-quality-gate-branch-protection.md](docs/decisions/D-158-sonar-quality-gate-branch-protection.md) |
+| D-159 | Memory entity bug fixes: timing, embedding, deduplication, acknowledgement | Accepted | 2026-05-18 | Block 8, Block 11, Block 22, Block 1 | [D-159-memory-entity-bug-fixes.md](docs/decisions/D-159-memory-entity-bug-fixes.md) |

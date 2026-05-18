@@ -10,6 +10,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY seed_system_documents.py .
+RUN uv sync --frozen --no-dev
 
 # Non-root user
 RUN useradd -m -u 1000 clive

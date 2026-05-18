@@ -14,9 +14,11 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY clive_telegram/ ./clive_telegram/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev \
+    && useradd -m -u 1000 clive
 
-RUN useradd -m -u 1000 clive
+ENV PATH="/app/.venv/bin:$PATH"
+
 USER clive
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

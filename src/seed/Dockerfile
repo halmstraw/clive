@@ -10,6 +10,8 @@ COPY pyproject.toml uv.lock seed_system_documents.py ./
 RUN uv sync --frozen --no-dev \
     && useradd -m -u 1000 clive
 
+ENV PATH="/app/.venv/bin:$PATH"
+
 USER clive
 
 CMD ["python", "seed_system_documents.py"]

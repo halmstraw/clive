@@ -14,10 +14,11 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY orchestrator/ ./orchestrator/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev \
+    && useradd -m -u 1000 clive
 
-# Non-root user
-RUN useradd -m -u 1000 clive
+ENV PATH="/app/.venv/bin:$PATH"
+
 USER clive
 
 EXPOSE 8080

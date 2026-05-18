@@ -271,7 +271,7 @@ async def _run_worker(worker_config: dict) -> None:
     log.info("worker_starting", worker_name=worker_name, run_id=str(run_id))
 
     # 2. Build scoped push capabilities
-    scoped_push = make_scoped_push(worker_name, execution_scope)
+    scoped_push = make_scoped_push(execution_scope)
 
     try:
         # 3. Execute the worker
@@ -363,7 +363,7 @@ async def scheduler_loop() -> None:
             await asyncio.sleep(SCHEDULER_TICK_SECONDS)
         except asyncio.CancelledError:
             log.info("scheduler_cancelled")
-            raise
+            return
 
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         for config in configs:

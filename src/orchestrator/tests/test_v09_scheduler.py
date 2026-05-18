@@ -71,38 +71,38 @@ class TestMakeScopedPush:
     def test_notify_present_when_telegram_in_scope(self):
         """make_scoped_push returns 'notify' callable when write:telegram in scope."""
         scope = ["write:telegram"]
-        result = make_scoped_push("daily_digest", scope)
+        result = make_scoped_push(scope)
         assert "notify" in result
         assert callable(result["notify"])
 
     def test_notify_absent_when_telegram_not_in_scope(self):
         """make_scoped_push does NOT return 'notify' when write:telegram absent."""
         scope = ["read:queries", "write:confirmations"]
-        result = make_scoped_push("knowledge_maintenance", scope)
+        result = make_scoped_push(scope)
         assert "notify" not in result
 
     def test_request_confirmation_present_when_confirmations_in_scope(self):
         """make_scoped_push returns 'request_confirmation' when write:confirmations in scope."""
         scope = ["write:confirmations"]
-        result = make_scoped_push("knowledge_maintenance", scope)
+        result = make_scoped_push(scope)
         assert "request_confirmation" in result
         assert callable(result["request_confirmation"])
 
     def test_request_confirmation_absent_when_confirmations_not_in_scope(self):
         """make_scoped_push does NOT return 'request_confirmation' when absent from scope."""
         scope = ["write:telegram", "read:queries"]
-        result = make_scoped_push("daily_digest", scope)
+        result = make_scoped_push(scope)
         assert "request_confirmation" not in result
 
     def test_empty_scope_returns_empty_dict(self):
         """make_scoped_push with empty scope returns an empty dict."""
-        result = make_scoped_push("unknown_worker", [])
+        result = make_scoped_push([])
         assert result == {}
 
     def test_full_scope_returns_both_capabilities(self):
         """make_scoped_push with both write scopes returns both capabilities."""
         scope = ["write:telegram", "write:confirmations"]
-        result = make_scoped_push("super_worker", scope)
+        result = make_scoped_push(scope)
         assert "notify" in result
         assert "request_confirmation" in result
 

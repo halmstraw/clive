@@ -1,8 +1,13 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV UV_SYSTEM_PYTHON=1
+
 WORKDIR /app
 
-RUN pip install --no-cache-dir --only-binary :all: asyncpg structlog python-dotenv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY seed_system_documents.py .
 

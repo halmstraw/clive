@@ -102,11 +102,8 @@ async def refresh_auth_cache() -> None:
 async def auth_cache_refresh_loop() -> None:
     """Background coroutine: refresh auth cache every 60 seconds."""
     while True:
-        try:
-            await asyncio.sleep(_AUTH_CACHE_REFRESH_SECONDS)
-            await refresh_auth_cache()
-        except asyncio.CancelledError:
-            raise
+        await asyncio.sleep(_AUTH_CACHE_REFRESH_SECONDS)
+        await refresh_auth_cache()
 
 
 def is_authenticated(chat_id: int) -> bool:

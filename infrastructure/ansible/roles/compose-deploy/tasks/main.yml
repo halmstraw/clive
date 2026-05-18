@@ -67,10 +67,10 @@
     dest: /home/clive/compose/observability/caddy/Caddyfile
     mode: "0644" # NOSONAR — world-read required: caddy container reads via bind mount
 
-# Restart Alloy so it picks up the new secrets.env (Grafana Cloud credentials).
-# postgres, minio, and all application services are already running —
-# starting or health-checking them here is an initial-setup concern, not day-2.
-- name: Restart Alloy to apply updated secrets
+# Recreate Alloy so it picks up the new secrets.env (Grafana Cloud credentials).
+# 'restart' reuses the existing container environment and does NOT re-read env_file.
+# 'up -d' recreates the container, which causes Docker to re-read env_file.
+- name: Recreate Alloy to apply updated secrets
   ansible.builtin.command:
-    cmd: docker compose -f /home/clive/compose/docker-compose.yml restart alloy
+    cmd: docker compose -f /home/clive/compose/docker-compose.yml up -d alloy
   changed_when: true

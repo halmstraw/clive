@@ -69,7 +69,7 @@ SCOPE_TO_CAPABILITY = {
 }
 
 
-def make_scoped_push(worker_name: str, execution_scope: list[str]) -> dict:
+def make_scoped_push(execution_scope: list[str]) -> dict:
     """Return a dict of permitted push callables for this worker.
 
     Keys are capability names (str). Values are async callables.

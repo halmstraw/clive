@@ -72,8 +72,8 @@ _SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
-_REMINDER_PREFIX_RE = re.compile(
-    r"^remind\s+me\s+(?:about|to)\s+",
+_REMINDER_RE = re.compile(
+    r"^remind\s+me\s+(?:about|to)\s+(.+?)\s+at\s+(.+)$",
     re.IGNORECASE,
 )
 

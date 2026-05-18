@@ -51,6 +51,8 @@ log = structlog.get_logger()
 QUERY_SERVICE_URL = os.environ.get("QUERY_SERVICE_URL", "http://query:8081")  # NOSONAR
 PROCESSING_SERVICE_URL = os.environ.get("PROCESSING_SERVICE_URL", "http://processing:8083")  # NOSONAR
 
+ALERT_ENDPOINT = "/alert"
+
 
 async def push_query_to_block8(event: CLIVEEvent) -> None:
     """Push query.received to Block 8 (internal service — not a surface).
@@ -137,7 +139,7 @@ async def push_response_to_surface(event: CLIVEEvent) -> None:
 async def push_alert_to_surface(event: CLIVEEvent) -> None:
     """Push alert.triggered to all surfaces (broadcast, D-146)."""
     await egress.push_to_all_surfaces(
-        "/alert",
+        ALERT_ENDPOINT,
         {
             "event_id": str(event.event_id),
             **event.payload,
@@ -253,7 +255,7 @@ async def push_cost_cap_notification_to_surface(event: CLIVEEvent) -> None:
     cap = event.payload.get("cap_usd", 0.0)
 
     await egress.push_to_all_surfaces(
-        "/alert",
+        ALERT_ENDPOINT,
         {
             "event_id": str(event.event_id),
             "severity": "warn",
@@ -292,7 +294,7 @@ async def push_admin_tool_result_to_surface(event: CLIVEEvent) -> None:
         severity = "warn"
 
     await egress.push_to_all_surfaces(
-        "/alert",
+        ALERT_ENDPOINT,
         {
             "event_id": str(event.event_id),
             "severity": severity,

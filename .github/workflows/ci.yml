@@ -139,6 +139,7 @@ jobs:
         working-directory: src/dashboard
 
       - name: SonarCloud scan
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

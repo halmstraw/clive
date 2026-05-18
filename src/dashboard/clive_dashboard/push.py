@@ -26,6 +26,8 @@ from .api import set_pending_response
 
 log = structlog.get_logger()
 
+_INVALID_JSON = "invalid JSON"
+
 # In-memory store for pending confirmation requests.
 # Keyed by action_request_id. Frontend polls /api/pending to see these.
 # (Pending actions are also retrieved from Block 13 via /retrieve/pending-actions
@@ -43,7 +45,7 @@ async def handle_response_push(request: web.Request) -> web.Response:
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "invalid JSON"}, status=400)
+        return web.json_response({"error": _INVALID_JSON}, status=400)
 
     conversation_id = data.get("conversation_id", "")
     event_id = data.get("event_id", "")
@@ -67,7 +69,7 @@ async def handle_confirmation_push(request: web.Request) -> web.Response:
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "invalid JSON"}, status=400)
+        return web.json_response({"error": _INVALID_JSON}, status=400)
 
     action_request_id = data.get("action_request_id", "")
     event_id = data.get("event_id", "")
@@ -88,7 +90,7 @@ async def handle_alert_push(request: web.Request) -> web.Response:
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "invalid JSON"}, status=400)
+        return web.json_response({"error": _INVALID_JSON}, status=400)
 
     # Keep last 20 alerts in memory for dashboard display
     _recent_alerts.insert(0, data)
@@ -108,7 +110,7 @@ async def handle_action_outcome_push(request: web.Request) -> web.Response:
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "invalid JSON"}, status=400)
+        return web.json_response({"error": _INVALID_JSON}, status=400)
 
     action_request_id = data.get("action_request_id", "")
     _pending_confirmations.pop(action_request_id, None)  # Remove from display
@@ -126,7 +128,7 @@ async def handle_deletion_result_push(request: web.Request) -> web.Response:
     try:
         data = await request.json()
     except Exception:
-        return web.json_response({"error": "invalid JSON"}, status=400)
+        return web.json_response({"error": _INVALID_JSON}, status=400)
 
     log.info(
         "dashboard_deletion_result_received",

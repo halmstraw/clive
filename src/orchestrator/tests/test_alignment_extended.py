@@ -181,27 +181,27 @@ class TestSchedulerMakeScopedPush:
     def test_write_telegram_scope_grants_notify(self):
         from orchestrator.scheduler import make_scoped_push
 
-        scoped = make_scoped_push("daily_digest", ["write:telegram"])
+        scoped = make_scoped_push(["write:telegram"])
         assert "notify" in scoped
         assert callable(scoped["notify"])
 
     def test_write_confirmations_scope_grants_request_confirmation(self):
         from orchestrator.scheduler import make_scoped_push
 
-        scoped = make_scoped_push("knowledge_maintenance", ["write:confirmations"])
+        scoped = make_scoped_push(["write:confirmations"])
         assert "request_confirmation" in scoped
 
     def test_no_scope_grants_nothing(self):
         from orchestrator.scheduler import make_scoped_push
 
-        scoped = make_scoped_push("bare_worker", [])
+        scoped = make_scoped_push([])
         assert "notify" not in scoped
         assert "request_confirmation" not in scoped
 
     def test_both_scopes_grants_both(self):
         from orchestrator.scheduler import make_scoped_push
 
-        scoped = make_scoped_push("worker", ["write:telegram", "write:confirmations"])
+        scoped = make_scoped_push(["write:telegram", "write:confirmations"])
         assert "notify" in scoped
         assert "request_confirmation" in scoped
 

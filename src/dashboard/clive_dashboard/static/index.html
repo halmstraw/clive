@@ -46,7 +46,7 @@
       cursor: pointer;
     }
     button:hover { background: #5dd68a; }
-    button:disabled { background: #444; color: #888; cursor: not-allowed; }
+    button:disabled { background: #444; color: #adadad; cursor: not-allowed; }
     #login-error { color: #f87171; font-size: 0.85rem; min-height: 1.2em; }
 
     /* App layout */
@@ -61,7 +61,7 @@
     header h1 { font-size: 1.2rem; color: #7ee8a2; letter-spacing: 0.08em; }
     .header-actions { display: flex; gap: 10px; align-items: center; }
     .badge {
-      background: #ef4444;
+      background: #b91c1c;
       color: white;
       border-radius: 12px;
       padding: 2px 8px;
@@ -83,6 +83,11 @@
       color: #888;
       border-bottom: 2px solid transparent;
       transition: all 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: inherit;
     }
     .tab.active { color: #7ee8a2; border-bottom-color: #7ee8a2; }
     .tab:hover { color: #e0e0e0; }
@@ -236,9 +241,9 @@
   </header>
 
   <div class="tabs">
-    <div class="tab active" role="button" tabindex="0" onclick="switchTab('query')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('query')">Query</div>
-    <div class="tab" role="button" tabindex="0" onclick="switchTab('pending')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('pending')">Pending Actions</div>
-    <div class="tab" role="button" tabindex="0" onclick="switchTab('history')" onkeydown="if(event.key==='Enter'||event.key===' ')switchTab('history')">History</div>
+    <button type="button" class="tab active" onclick="switchTab('query')">Query</button>
+    <button type="button" class="tab" onclick="switchTab('pending')">Pending Actions</button>
+    <button type="button" class="tab" onclick="switchTab('history')">History</button>
   </div>
 
   <!-- Query tab -->
@@ -299,6 +304,7 @@
         document.getElementById('login-btn').disabled = false;
       }
     } catch(e) {
+      console.error('Login error:', e);
       errEl.textContent = 'Network error';
       document.getElementById('login-btn').disabled = false;
     }
@@ -373,6 +379,7 @@
       // Poll for response
       pollForResponse(conversationId, thinkingEl);
     } catch(e) {
+      console.error('Query error:', e);
       thinkingEl.classList.remove('thinking');
       thinkingEl.textContent = 'Network error.';
       document.getElementById('send-btn').disabled = false;
@@ -403,7 +410,7 @@
           document.getElementById('send-btn').disabled = false;
         }
         // 202 = still pending, keep polling
-      } catch(e) { /* keep polling */ }
+      } catch { /* keep polling on transient fetch errors */ }
     }, 1000);
   }
 
@@ -421,7 +428,7 @@
       if (!r.ok) return;
       const d = await r.json();
       renderPending(d.actions || []);
-    } catch(e) {}
+    } catch(e) { console.error('Pending load error:', e); }
   }
 
   function renderPending(actions) {
@@ -501,6 +508,7 @@
         list.appendChild(div);
       });
     } catch(e) {
+      console.error('History load error:', e);
       list.innerHTML = '<p style="color:#f87171">Network error.</p>';
     }
   }

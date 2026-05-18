@@ -27,31 +27,20 @@ log = structlog.get_logger()
 MAX_DIGEST_LENGTH = 800
 
 
-async def run(run_id: str, pool: asyncpg.Pool, scoped_push: dict) -> str:
-    """Daily digest worker. Returns outcome_summary string."""
-    log.debug("daily_digest_run_start", run_id=str(run_id))
-    now = datetime.now(timezone.utc)
-    # "16 May 2026" — day without leading zero, 3-letter month, 4-digit year
-    date_str = f"{now.day} {now.strftime('%b %Y')}"
-
-    # ------------------------------------------------------------------
-    # a. Query count  (read:queries)
-    # ------------------------------------------------------------------
-    query_count: int | str = "unknown"
+async def _fetch_query_count(pool: asyncpg.Pool) -> int | str:
     try:
         async with pool.acquire() as conn:
             row = await conn.fetchval(
                 "SELECT COUNT(*) FROM clive_state.conversation_turns"
                 " WHERE role = 'user' AND created_at >= NOW() - INTERVAL '24 hours'"
             )
-        query_count = int(row)
+        return int(row)
     except Exception as exc:
         log.warning("daily_digest_query_count_failed", error=str(exc))
+        return "unknown"
 
-    # ------------------------------------------------------------------
-    # b. Confirmed actions  (read:actions)
-    # ------------------------------------------------------------------
-    actions_data: list[tuple[str, int]] | str = "unknown"
+
+async def _fetch_actions_data(pool: asyncpg.Pool) -> list[tuple[str, int]] | str:
     try:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
@@ -61,14 +50,13 @@ async def run(run_id: str, pool: asyncpg.Pool, scoped_push: dict) -> str:
                 "   AND resolved_at >= NOW() - INTERVAL '24 hours'"
                 " GROUP BY action_type"
             )
-        actions_data = [(row["action_type"], int(row["n"])) for row in rows]
+        return [(row["action_type"], int(row["n"])) for row in rows]
     except Exception as exc:
         log.warning("daily_digest_actions_failed", error=str(exc))
+        return "unknown"
 
-    # ------------------------------------------------------------------
-    # c. LLM spend  (read:cost)
-    # ------------------------------------------------------------------
-    cost_usd: float | str = "unknown"
+
+async def _fetch_cost_usd(pool: asyncpg.Pool) -> float | str:
     try:
         async with pool.acquire() as conn:
             row = await conn.fetchval(
@@ -76,23 +64,36 @@ async def run(run_id: str, pool: asyncpg.Pool, scoped_push: dict) -> str:
                 " FROM clive_state.llm_usage"
                 " WHERE created_at >= NOW() - INTERVAL '24 hours'"
             )
-        cost_usd = float(row) if row is not None else 0.0
+        return float(row) if row is not None else 0.0
     except Exception as exc:
         log.warning("daily_digest_cost_failed", error=str(exc))
+        return "unknown"
 
-    # ------------------------------------------------------------------
-    # d. Feedback count  (read:feedback)
-    # ------------------------------------------------------------------
-    feedback_count: int | str = "unknown"
+
+async def _fetch_feedback_count(pool: asyncpg.Pool) -> int | str:
     try:
         async with pool.acquire() as conn:
             row = await conn.fetchval(
                 "SELECT COUNT(*) FROM clive_state.feedback"
                 " WHERE submitted_at >= NOW() - INTERVAL '24 hours'"
             )
-        feedback_count = int(row)
+        return int(row)
     except Exception as exc:
         log.warning("daily_digest_feedback_failed", error=str(exc))
+        return "unknown"
+
+
+async def run(run_id: str, pool: asyncpg.Pool, scoped_push: dict) -> str:
+    """Daily digest worker. Returns outcome_summary string."""
+    log.debug("daily_digest_run_start", run_id=str(run_id))
+    now = datetime.now(timezone.utc)
+    # "16 May 2026" — day without leading zero, 3-letter month, 4-digit year
+    date_str = f"{now.day} {now.strftime('%b %Y')}"
+
+    query_count = await _fetch_query_count(pool)
+    actions_data = await _fetch_actions_data(pool)
+    cost_usd = await _fetch_cost_usd(pool)
+    feedback_count = await _fetch_feedback_count(pool)
 
     # ------------------------------------------------------------------
     # e. System health

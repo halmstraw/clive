@@ -220,7 +220,11 @@ async def _do_tool_update(
             event_type=ADMIN_TOOL_UPDATED,
             source_block=13,
             conversation_id=event.conversation_id,
-            payload={"tool_name": tool_name, "action": action_label},
+            payload={
+                "tool_name": tool_name,
+                "action": action_label,
+                "chat_id": event.payload.get("chat_id"),
+            },
         )
         await audit.write(result_event, AlignmentResult.PASS, "emitted")
         await _bus.publish(result_event)
@@ -230,7 +234,11 @@ async def _do_tool_update(
             event_type=ADMIN_TOOL_ERROR,
             source_block=13,
             conversation_id=event.conversation_id,
-            payload={"tool_name": tool_name, "reason": "tool_not_found"},
+            payload={
+                "tool_name": tool_name,
+                "reason": "tool_not_found",
+                "chat_id": event.payload.get("chat_id"),
+            },
         )
         await audit.write(error_event, AlignmentResult.PASS, "emitted")
         await _bus.publish(error_event)

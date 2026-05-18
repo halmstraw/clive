@@ -52,6 +52,8 @@ QUERY_SERVICE_URL = os.environ.get("QUERY_SERVICE_URL", "http://query:8081")  # 
 PROCESSING_SERVICE_URL = os.environ.get("PROCESSING_SERVICE_URL", "http://processing:8083")  # NOSONAR
 
 ALERT_ENDPOINT = "/alert"
+TOOL_UPDATED_ENDPOINT = "/tool-updated"
+TOOL_ERROR_ENDPOINT = "/tool-error"
 
 
 async def push_query_to_block8(event: CLIVEEvent) -> None:
@@ -278,27 +280,26 @@ async def push_admin_tool_result_to_surface(event: CLIVEEvent) -> None:
     """Push admin.tool_updated or admin.tool_error to all surfaces.
 
     D-003: Block 13 emits these after processing admin.tool_disable /
-    admin.tool_enable. Surfaces receive them via the /alert endpoint.
+    admin.tool_enable. Surfaces receive them via dedicated endpoints so
+    the surface can render the correct confirmation message.
     """
     if event.event_type == "admin.tool_updated":
-        tool_name = event.payload.get("tool_name", "")
-        action = event.payload.get("action", "")
-        title = f"Tool {action}"
-        body = f"Tool '{tool_name}' {action} successfully."
-        severity = "info"
+        await egress.push_to_all_surfaces(
+            TOOL_UPDATED_ENDPOINT,
+            {
+                "event_id": str(event.event_id),
+                "tool_name": event.payload.get("tool_name", ""),
+                "action": event.payload.get("action", ""),
+                "chat_id": event.payload.get("chat_id"),
+            },
+        )
     else:  # admin.tool_error
-        tool_name = event.payload.get("tool_name", "")
-        reason = event.payload.get("reason", "unknown")
-        title = "Tool admin error"
-        body = f"Tool admin error for '{tool_name}': {reason}."
-        severity = "warn"
-
-    await egress.push_to_all_surfaces(
-        ALERT_ENDPOINT,
-        {
-            "event_id": str(event.event_id),
-            "severity": severity,
-            "title": title,
-            "body": body,
-        },
-    )
+        await egress.push_to_all_surfaces(
+            TOOL_ERROR_ENDPOINT,
+            {
+                "event_id": str(event.event_id),
+                "tool_name": event.payload.get("tool_name", ""),
+                "reason": event.payload.get("reason", "unknown"),
+                "chat_id": event.payload.get("chat_id"),
+            },
+        )

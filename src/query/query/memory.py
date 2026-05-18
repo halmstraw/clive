@@ -6,9 +6,11 @@ Three capabilities, all internal to Block 8 (D-003 compliant):
    clive_state.memory_entities returns the top-K most relevant facts about the
    owner before context assembly (AC-3).
 
-2. Entity storage — after each response, extracted entities from llm.extract_entities
-   are persisted here with 1536-dim embeddings (D-096, text-embedding-3-small).
-   Called by handler.py post-response (AC-2).
+2. Entity storage — after each LLM call but before response emission (D-159),
+   extracted entities from llm.extract_entities are persisted here with 1536-dim
+   embeddings (D-096, text-embedding-3-small). Uses upsert on (entity_type, key)
+   so repeated facts update the existing row rather than adding duplicates (D-159 Fix 3).
+   Called by handler.py Step 11.5 (AC-2).
 
 3. Memory consolidation — compresses old turns into a summary row when
    turn count > 100 or oldest turn > 48h. Prunes raw turns after summarisation.
@@ -25,6 +27,12 @@ asyncpg pgvector note: asyncpg has no built-in pgvector codec.
 Embeddings (list[float]) must be converted to str() before passing as
 a $N::vector SQL parameter — same pattern as processing/store.py.
 str([1.0, 2.0, ...]) produces "[1.0, 2.0, ...]" which pgvector parses correctly.
+
+DB schema requirement (D-159 Fix 3):
+  CREATE UNIQUE INDEX IF NOT EXISTS memory_entities_type_key_idx
+    ON clive_state.memory_entities (entity_type, key);
+This index enables the ON CONFLICT upsert in store_entities.
+Added to infrastructure/sql/init/05_memory_entities_unique_idx.sql.
 """
 
 from __future__ import annotations
@@ -103,11 +111,22 @@ async def store_entities(
     source_turn_id: uuid.UUID | None,
     embeddings: list[list[float]],
 ) -> None:
-    """Insert extracted entities with embeddings into clive_state.memory_entities.
+    """Upsert extracted entities with embeddings into clive_state.memory_entities.
+
+    Uses ON CONFLICT (entity_type, key) DO UPDATE so that:
+      - First occurrence: inserts a new row.
+      - Repeated fact (same entity_type + key): updates value, embedding,
+        and source_turn_id in place — no duplicate rows.
+      - Updated preference (e.g. "my favourite colour is now blue"): row is
+        updated to the latest value.
+
+    Requires the unique index created by D-159:
+      CREATE UNIQUE INDEX IF NOT EXISTS memory_entities_type_key_idx
+        ON clive_state.memory_entities (entity_type, key);
 
     Non-fatal: logs and returns on DB error.
 
-    AC-2: called by handler.py after each successful response.
+    AC-2: called by handler.py Step 11.5 (before response emission, D-159).
 
     Args:
         entities:       list of {entity_type, key, value} (validated by llm.extract_entities)
@@ -129,6 +148,10 @@ async def store_entities(
                     INSERT INTO clive_state.memory_entities
                         (entity_type, key, value, source_turn_id, embedding)
                     VALUES ($1, $2, $3, $4, $5::vector)
+                    ON CONFLICT (entity_type, key) DO UPDATE
+                        SET value          = EXCLUDED.value,
+                            embedding      = EXCLUDED.embedding,
+                            source_turn_id = EXCLUDED.source_turn_id
                     """,
                     entity["entity_type"],
                     entity["key"],

@@ -24,6 +24,12 @@ v0.7: Block 11 full cross-session memory (D-128).
   - Post-response: run consolidation if turn count/age threshold met (AC-5).
   - All memory operations are non-fatal (caught exceptions → graceful degradation).
 
+v0.7 fix (D-159): entity extraction and storage moved to before response emission.
+  - Entities guaranteed in DB before user receives response and can send a follow-up.
+  - Embeddings now use "key: value" string (not bare value) for semantic accuracy.
+  - store_entities uses upsert (ON CONFLICT) — repeated facts update, not duplicate.
+  - Memory consolidation remains post-response (no timing requirement on that step).
+
 v0.8: Block 17 Tool Registry integration (D-137, D-138).
   - Live tool registry fetched at the start of each query (TTL-cached, 60s).
   - Available tools injected into the LLM system prompt (name + description only;
@@ -468,15 +474,20 @@ async def handle_query(event: dict[str, Any]) -> None:
     9.   Assemble context (D-044) — includes memory entities as Tier 3.5
     10.  Call LLM with live tool list in system prompt (D-077, v0.8 D-137)
     11.  Record LLM usage to clive_state.llm_usage (D-125)
+    11.5 Entity extraction + embedding + storage (D-159) — non-fatal:
+         Runs BEFORE response emission so entities are guaranteed in DB
+         before the user can send a follow-up query. Embeds key:value
+         string for meaningful semantic retrieval. Upserts on (entity_type,
+         key) — repeated facts update existing rows, not add duplicates.
     12.  Build response payload, cache, emit query.response (v0.3: include chunk_ids)
     13.  Record query duration (D-122 Phase 2)
     14.  Retrieval tracking (v0.9, D-140) — non-fatal:
          Update retrieval_count + last_retrieved_at on returned chunks.
          Skipped if chunk_ids is empty. Not called on cache hits (D-046).
-    15.  Post-response memory operations (v0.7, D-128) — non-fatal:
-         a. Extract entities from the turn (AC-2)
-         b. Store entities with embeddings (AC-2)
-         c. Consolidate old turns if threshold met (AC-5)
+    15.  Post-response memory consolidation (v0.7, D-128, AC-5) — non-fatal:
+         Run consolidation if turn count/age threshold met.
+         Stays post-response: no timing requirement; consolidation does not
+         affect entity retrieval for the immediately following query.
     """
     start_time = time.monotonic()
 
@@ -771,6 +782,24 @@ async def handle_query(event: dict[str, Any]) -> None:
     llm_tokens_total.labels(model=model_label, type="completion").inc(usage_data["completion_tokens"])
     llm_cost_usd_total.labels(model=model_label).inc(cost_usd)
 
+    # 11.5 Entity extraction + embedding + storage — D-159
+    # Runs BEFORE response emission so entities are in DB before the user can
+    # send a follow-up. Non-fatal: failure here does not suppress the response.
+    # Embeds "key: value" (not bare value) for semantic accuracy (D-159 Fix 2).
+    # store_entities uses upsert — repeated facts update, not duplicate (D-159 Fix 3).
+    try:
+        entities = await llm.extract_entities(user_input, response_text)
+        if entities:
+            entity_values = [f"{e['key']}: {e['value']}" for e in entities]
+            embeddings = await llm.embed_batch(entity_values)
+            await memory.store_entities(
+                entities,
+                source_turn_id=None,   # turn_id not available here; orchestrator owns turn writes
+                embeddings=embeddings,
+            )
+    except Exception as exc:
+        log.warning("entity_extraction_failed", error=str(exc))
+
     # 12. Build response and cache it
     # chunk_ids included so Block 18 can tag specific chunks as poor quality
     response_payload = {
@@ -805,23 +834,11 @@ async def handle_query(event: dict[str, Any]) -> None:
     # 14. Retrieval tracking (v0.9, D-140) — non-fatal, skip if no chunks returned
     await _update_chunk_retrieval_stats(chunk_ids)
 
-    # 15. Post-response memory operations — v0.7, D-128
-    # These run after query.response has been emitted. Non-fatal throughout.
-    # a. Extract entities from the completed turn.
-    # b. Store entities with embeddings in clive_state.memory_entities.
-    # c. Consolidate old turns if threshold triggered.
+    # 15. Post-response memory consolidation — v0.7, D-128, AC-5
+    # Entity extraction has already run (Step 11.5). Only consolidation remains here.
+    # Consolidation checks whether old turns need summarising — no timing requirement
+    # relative to response delivery.
     try:
-        entities = await llm.extract_entities(user_input, response_text)
-        if entities:
-            entity_values = [e["value"] for e in entities]
-            embeddings = await llm.embed_batch(entity_values)
-            await memory.store_entities(
-                entities,
-                source_turn_id=None,   # turn_id not available here; orchestrator owns turn writes
-                embeddings=embeddings,
-            )
         await memory.consolidate_if_needed(conversation_id, llm.summarise_turns)
     except Exception as exc:
-        # Any failure in memory operations is non-fatal.
-        # The response has already been delivered.
-        log.warning("post_response_memory_failed", error=str(exc))
+        log.warning("memory_consolidation_failed", error=str(exc))

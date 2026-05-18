@@ -184,7 +184,7 @@ class TestRunWorker:
 class TestSchedulerLoop:
     @pytest.mark.asyncio
     async def test_scheduler_loop_exits_cleanly_on_cancelled_error(self):
-        """scheduler_loop returns (no re-raise) on CancelledError from sleep."""
+        """scheduler_loop re-raises CancelledError so asyncio knows the task was cancelled."""
         mock_conn = AsyncMock()
         mock_conn.fetch = AsyncMock(return_value=[])  # No workers
         pool = _make_mock_pool(mock_conn)
@@ -196,7 +196,8 @@ class TestSchedulerLoop:
         try:
             scheduler_mod._pool = pool
             with patch("orchestrator.scheduler.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError())):
-                await scheduler_mod.scheduler_loop()  # Should return without raising
+                with pytest.raises(asyncio.CancelledError):
+                    await scheduler_mod.scheduler_loop()
         finally:
             scheduler_mod._pool = original
             scheduler_mod._WORKERS.clear()
@@ -231,7 +232,8 @@ class TestSchedulerLoop:
         try:
             scheduler_mod._pool = pool
             with patch("orchestrator.scheduler.asyncio.sleep", counting_sleep):
-                await scheduler_mod.scheduler_loop()
+                with pytest.raises(asyncio.CancelledError):
+                    await scheduler_mod.scheduler_loop()
         finally:
             scheduler_mod._pool = original
             scheduler_mod._WORKERS.clear()

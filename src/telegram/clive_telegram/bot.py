@@ -72,8 +72,8 @@ _SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
-_REMINDER_RE = re.compile(
-    r"^remind\s+me\s+(?:about|to)\s+(.+?)\s+at\s+(.+)$",
+_REMIND_PREFIX_RE = re.compile(
+    r"^remind\s+me\s+(?:about|to)\s+",
     re.IGNORECASE,
 )
 
@@ -98,12 +98,16 @@ def detect_reminder_intent(text: str) -> tuple[str, datetime] | None:
     Uses CLIVE_TIMEZONE env var for timezone-aware parsing (option B+C).
     Returns None if the time string cannot be parsed.
     """
-    m = _REMINDER_RE.match(text.strip())
+    text = text.strip()
+    m = _REMIND_PREFIX_RE.match(text)
     if not m:
         return None
-
-    reminder_msg = m.group(1).strip()
-    time_str = m.group(2).strip()
+    rest = text[m.end():]
+    idx = rest.lower().rfind(" at ")
+    if idx == -1:
+        return None
+    reminder_msg = rest[:idx].strip()
+    time_str = rest[idx + 4:].strip()
     tz = _get_tz()
 
     try:

@@ -4,8 +4,8 @@ Source of truth: this file and docs/decisions/
 Git history is the audit trail.
 Notion is a read-only view — do not edit decisions in Notion.
 
-Last decision ID: D-159
-Last updated: 2026-05-18
+Last decision ID: D-161
+Last updated: 2026-05-19
 
 | ID | Title | Status | Date | Blocks | File |
 |----|-------|--------|------|--------|------|
@@ -168,3 +168,5 @@ Last updated: 2026-05-18
 | D-157 | Ansible playbook split into initial-setup and day-2 tagged plays | Accepted | 2026-05-17 | Block 27, Block 28 | [D-157-ansible-playbook-split-initial-setup-day2.md](docs/decisions/D-157-ansible-playbook-split-initial-setup-day2.md) |
 | D-158 | Sonar Quality Gate enforced via branch protection on main | Accepted | 2026-05-18 | Block 28, Block 27 | [D-158-sonar-quality-gate-branch-protection.md](docs/decisions/D-158-sonar-quality-gate-branch-protection.md) |
 | D-159 | Memory entity bug fixes: timing, embedding, deduplication, acknowledgement | Accepted | 2026-05-18 | Block 8, Block 11, Block 22, Block 1 | [D-159-memory-entity-bug-fixes.md](docs/decisions/D-159-memory-entity-bug-fixes.md) |
+| D-160 | Reject MemPalace as memory subsystem dependency; carry forward three design patterns | Accepted | 2026-05-19 | Block 11, Block 16, Block 7, Block 12, Block 13, Block 23 | [D-160-reject-mempalace-memory-system.md](docs/decisions/D-160-reject-mempalace-memory-system.md) |
+| D-161 | System document versions loaded via SQL init scripts (IaC) | Accepted | 2026-05-19 | Block 1, Block 16, Block 27, Block 28 | [D-161-system-document-iac-loader.md](docs/decisions/D-161-system-document-iac-loader.md) |
